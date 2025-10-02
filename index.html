@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ATA Judge Assignment — Rings & Judges (Live-ready)</title>
+  <style>
+    :root {
+      --bg: #0b1220; --panel:#0f1b39; --mesh:#0a132a; --ink:#e6ecff; --muted:#a6b3d1; --accent:#5b8cff; --ok:#34d399; --warn:#f59e0b; --danger:#ef4444;
+      --ring-w: 260px; --ring-gap: 16px; --sidebar-w: 360px;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--ink);display:grid;grid-template-rows:auto 1fr;gap:16px;padding:16px}
+    header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    h1{font-size:18px;margin:0;font-weight:800}
+    input[type="text"],select{border:1px solid rgba(255,255,255,.15);background:#0b1b3a;color:var(--ink);border-radius:10px;padding:10px;font-weight:700}
+    button,label.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;background:#1b2848;color:var(--ink);cursor:pointer}
+    button.primary{background:var(--accent);color:#fff}
+
+    .shell{display:grid;grid-template-columns:1fr var(--sidebar-w);gap:16px;min-height:80vh}
+    .left{display:grid;grid-template-rows:auto 1fr}
+
+    .board{position:relative;background:var(--panel);border-radius:14px;border:1px solid rgba(255,255,255,.08);padding:12px;overflow:auto}
+    .rings{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--ring-w),1fr));gap:var(--ring-gap)}
+
+    .ring{background:var(--mesh);border-radius:12px;border:1px solid rgba(255,255,255,.08);padding:10px;display:grid;gap:8px;min-height:210px}
+    .ring-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
+    .ring-id{font-weight:800;color:#cfe3ff}
+    .ring-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+    .ring-status .box{width:16px;height:16px;border-radius:4px;border:2px solid rgba(255,255,255,.25);display:grid;place-items:center}
+    .ring[data-full="true"] .ring-status{color:var(--ok);font-weight:800}
+    .ring[data-full="true"] .ring-status .box{background:var(--ok);border-color:var(--ok)}
+
+    .ring-controls{display:grid;gap:6px}
+    .div-input{width:100%}
+
+    .slots{display:grid;gap:6px}
+    .slot{position:relative;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.25);border-radius:10px;padding:10px;min-height:52px}
+    .slot[data-filled="true"]{border-style:solid;background:rgba(80,255,191,.06)}
+    .clear{position:absolute;right:6px;top:6px;border:0;background:transparent;color:#a6b3d1;font-weight:900;cursor:pointer}
+
+    .sidebar{background:var(--panel);border-radius:14px;border:1px solid rgba(255,255,255,.08);display:grid;grid-template-rows:auto 1fr;min-height:0}
+    .sidebar-head{padding:12px;display:grid;gap:8px;border-bottom:1px solid rgba(255,255,255,.06)}
+    .tray{position:relative;overflow-y:auto;overflow-x:hidden;padding:10px}
+
+    .tile{position:relative;background:linear-gradient(180deg,#b4c5ff,#7da7ff);color:#0b1024;border-radius:10px;border:1px solid rgba(0,0,0,.2);box-shadow:0 6px 16px rgba(0,0,0,.3);padding:10px;display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:8px}
+    .tile .badges{display:flex;gap:6px}
+    .badge{font-size:11px;border-radius:8px;background:rgba(0,0,0,.25);color:#fff;padding:2px 6px}
+    .tile[data-competing="true"]{opacity:.4;filter:grayscale(1)}
+
+    .muted{color:var(--muted);font-size:12px}
+    .footer-tip{grid-column:1/-1;color:var(--muted);font-size:12px}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ATA Judge Assignment — <span class="muted">Right-panel Judges → Rings</span></h1>
+    <input id="tournamentName" type="text" placeholder="Tournament name…" />
+    <button id="newBtn" type="button" class="primary">New Rings</button>
+    <button id="addJudgeBtn" type="button">Add Judge</button>
+    <label class="btn" for="csvInput">Import Judges (CSV)</label>
+    <input id="csvInput" type="file" accept=".csv" hidden />
+    <div class="spacer"></div>
+    <span id="meta" class="muted"></span>
+  </header>
+
+  <div class="shell">
+    <div class="left">
+      <div class="board">
+        <div id="rings" class="rings"></div>
+      </div>
+      <div class="footer-tip">• Rings are auto-numbered. Type a <b>Division code</b> in a ring; judges with that code are marked <i>Competing</i> and can’t be placed. • Choose a <b>Ring Category</b> to enforce rank eligibility. • Drag judges from the right into any open slot. • Click × to remove a judge back to the list.</div>
+    </div>
+
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <div class="row"><b>Judges (drag →)</b></div>
+        <input id="searchBox" type="text" placeholder="Search judges by name…" />
+        <div class="row" style="display:grid;grid-template-columns:1fr 120px 120px;gap:8px">
+          <input id="jName" type="text" placeholder="Judge name (include title if any)" />
+          <input id="jRank" type="text" placeholder="Rank (optional)" />
+          <input id="jDiv" type="text" placeholder="Division (optional)" />
+        </div>
+      </div>
+      <div id="tray" class="tray"></div>
+    </aside>
+  </div>
+
+  <script>
+    // ------------------ STATE ------------------
+    const RINGS_PER_ROW = 4; // visual only; grid auto-fills
+    const SLOTS_PER_RING = 3;
+
+    let rings = 12; // default
+    let ringDivisions = [];      // per ring raw
+    let ringDivisionsNorm = [];  // normalized
+    let ringCategory = [];       // per ring category
+
+    const tiles = new Map();     // id -> tile state
+    let idCounter = 1;
+
+    const ringLevels = { // minimum judge level required for a ring category
+      'Tiger': 0,
+      'Color': 0,
+      '1 Degree': 1,
+      '2/3 Degree': 2,
+      '4/5 Degree': 4,
+      '6+ Degree': 6,
+    };
+
+    // judge level parsing from rank string
+    function parseLevel(rank=""){
+      rank = (rank||"").toLowerCase();
+      if(/6/.test(rank)) return 6;
+      if(/4\/?5|4\s*\/\s*5/.test(rank)) return 4;
+      if(/2\/?3|2\s*\/\s*3/.test(rank)) return 2;
+      if(/1st|1\s*degree|first/.test(rank)) return 1;
+      if(/color|tiger/.test(rank)) return 0;
+      // default unknown -> very high so they can judge anything unless specified
+      return 6;
+    }
+
+    function categoryMinLevel(cat){
+      return ringLevels[cat] ?? 0;
+    }
+
+    // Eligibility matrix per your rules
+    function judgeEligibleFor(cat, judgeLevel){
+      const min = categoryMinLevel(cat);
+      // Special: 1st Degree judges only Tiger/Color (min 0) — block them from 1 Degree rings
+      if(judgeLevel===1) return (cat==='Tiger' || cat==='Color');
+      if(judgeLevel===2) return (cat==='1 Degree' || cat==='2/3 Degree');
+      if(judgeLevel===4) return (['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree'].includes(cat));
+      if(judgeLevel>=6) return true;
+      // Color/Tiger level (0) cannot judge anything unless explicitly allowed above
+      return false;
+    }
+
+    // division normalization
+    const normalizeDivision = (s)=> (s||'').trim().toLowerCase();
+
+    // occupied slots map by global slot index -> tileId
+    let slotsOccupied = [];
+
+    // ------------------ DOM ------------------
+    const ringsEl = document.getElementById('rings');
+    const trayEl = document.getElementById('tray');
+    const metaEl = document.getElementById('meta');
+    const searchBox = document.getElementById('searchBox');
+
+    // ------------------ RINGS RENDER ------------------
+    function buildRings(n){
+      ringsEl.innerHTML = '';
+      ringDivisions = new Array(n).fill('');
+      ringDivisionsNorm = new Array(n).fill('');
+      ringCategory = new Array(n).fill('Color');
+      slotsOccupied = new Array(n * SLOTS_PER_RING).fill(null);
+
+      for(let r=0;r<n;r++){
+        ringsEl.appendChild(buildRingCard(r));
+      }
+      updateMeta();
+    }
+
+    function buildRingCard(ringIdx){
+      const ring = document.createElement('div');
+      ring.className = 'ring';
+      ring.dataset.index = ringIdx;
+      ring.dataset.full = 'false';
+
+      const head = document.createElement('div');
+      head.className = 'ring-header';
+      const id = document.createElement('div'); id.className='ring-id'; id.textContent = `Ring ${ringIdx+1}`;
+      const status = document.createElement('div'); status.className='ring-status'; status.innerHTML = `<span class="box">✓</span> FULL`;
+      head.append(id,status);
+
+      const controls = document.createElement('div'); controls.className='ring-controls';
+      const divInput = document.createElement('input'); divInput.className='div-input'; divInput.placeholder='Division code (e.g., M451829)';
+      divInput.addEventListener('change', ()=> onDivisionChange(ringIdx, divInput.value));
+
+      const catSel = document.createElement('select');
+      ['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree','6+ Degree'].forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;catSel.appendChild(o);});
+      catSel.value = 'Color';
+      catSel.addEventListener('change', ()=> onCategoryChange(ringIdx, catSel.value));
+
+      controls.append(divInput, catSel);
+
+      const slots = document.createElement('div'); slots.className='slots';
+      for(let s=0;s<SLOTS_PER_RING;s++){
+        const slot = document.createElement('div');
+        slot.className='slot';
+        slot.draggable=false;
+        slot.dataset.ring = ringIdx;
+        slot.dataset.slot = s;
+        slot.textContent = `Judge slot ${s+1}`;
+        const x = document.createElement('button'); x.className='clear'; x.textContent='×'; x.title='Remove judge'; x.addEventListener('click', ()=> clearSlot(slot));
+        slot.appendChild(x);
+        slot.addEventListener('dragover', (e)=> e.preventDefault());
+        slot.addEventListener('drop', (e)=> onDropOnSlot(e, slot));
+        slots.appendChild(slot);
+      }
+
+      ring.append(head, controls, slots);
+      return ring;
+    }
+
+    function updateRingFull(ringIdx){
+      let count = 0;
+      for(let s=0;s<SLOTS_PER_RING;s++) if(slotsOccupied[ringIdx*SLOTS_PER_RING+s]) count++;
+      const ring = ringsEl.querySelector(`.ring[data-index="${ringIdx}"]`);
+      if(ring) ring.dataset.full = (count>=SLOTS_PER_RING) ? 'true':'false';
+    }
+
+    function onDivisionChange(ringIdx, code){
+      ringDivisions[ringIdx] = code;
+      ringDivisionsNorm[ringIdx] = normalizeDivision(code);
+      // Pop out any ineligible judges due to division
+      for(let s=0;s<SLOTS_PER_RING;s++){
+        const idx = ringIdx*SLOTS_PER_RING+s;
+        const id = slotsOccupied[idx];
+        if(!id) continue;
+        const t = tiles.get(id);
+        if(!t) continue;
+        if(t.divNorm && ringDivisionsNorm[ringIdx] && t.divNorm===ringDivisionsNorm[ringIdx]){
+          removeFromSlot(idx);
+          returnToTray(t);
+        }
+      }
+      recomputeCompeting();
+      updateRingFull(ringIdx);
+    }
+
+    function onCategoryChange(ringIdx, cat){
+      ringCategory[ringIdx] = cat;
+      // Auto-remove too-low ranks
+      for(let s=0;s<SLOTS_PER_RING;s++){
+        const idx = ringIdx*SLOTS_PER_RING+s;
+        const id = slotsOccupied[idx];
+        if(!id) continue;
+        const t = tiles.get(id);
+        if(!t) continue;
+        if(!judgeEligibleFor(cat, t.level)){
+          removeFromSlot(idx);
+          returnToTray(t);
+        }
+      }
+      updateRingFull(ringIdx);
+    }
+
+    function clearSlot(slot){
+      const idx = parseInt(slot.dataset.ring)*SLOTS_PER_RING + parseInt(slot.dataset.slot);
+      const id = slotsOccupied[idx]; if(!id) return;
+      const tile = tiles.get(id); if(!tile) return;
+      removeFromSlot(idx);
+      returnToTray(tile);
+    }
+
+    function removeFromSlot(idx){
+      const ringIdx = Math.floor(idx / SLOTS_PER_RING);
+      const sIdx = idx % SLOTS_PER_RING;
+      slotsOccupied[idx]=null;
+      const slot = ringsEl.querySelectorAll('.slot')[idx];
+      if(slot){ slot.dataset.filled='false'; slot.childNodes.forEach(n=>{ if(n.nodeType===3) n.remove(); }); slot.firstChild && (slot.firstChild.textContent='×'); slot.insertBefore(document.createTextNode(`Judge slot ${sIdx+1}`), slot.firstChild); }
+      updateRingFull(ringIdx);
+    }
+
+    function updateMeta(){
+      metaEl.textContent = `Rings: ${rings}`;
+    }
+
+    // ------------------ JUDGES ------------------
+    function addJudge(name, rank='', division=''){
+      const id = `J${idCounter++}`;
+      const el = document.createElement('div');
+      el.className='tile'; el.draggable=true; el.dataset.id = id;
+      el.innerHTML = `<div class="name"></div><div class="badges"></div>`;
+      el.querySelector('.name').textContent = name;
+      const badges = el.querySelector('.badges');
+      const b1 = document.createElement('span'); b1.className='badge'; b1.textContent = (rank||''); badges.appendChild(b1);
+      const b2 = document.createElement('span'); b2.className='badge'; b2.textContent = (division||''); badges.appendChild(b2);
+
+      trayEl.appendChild(el);
+
+      const tile = { id, el, name, rank, division, divNorm: normalizeDivision(division), level: parseLevel(rank), placed:false, slotIndex:-1 };
+      tiles.set(id, tile);
+
+      el.addEventListener('dragstart', (e)=>{
+        e.dataTransfer.setData('text/plain', id);
+      });
+
+      layoutTray();
+      recomputeCompeting();
+      return tile;
+    }
+
+    function layoutTray(){
+      const q = (searchBox.value||'').toLowerCase();
+      const children = Array.from(trayEl.children);
+      children.forEach(ch=>{
+        const id = ch.dataset.id; const t = tiles.get(id);
+        const match = !q || (t && (t.name.toLowerCase().includes(q)));
+        ch.style.display = (t && !t.placed && match) ? 'grid' : 'none';
+      });
+    }
+
+    searchBox.addEventListener('input', layoutTray);
+
+    function recomputeCompeting(){
+      const active = new Set(ringDivisionsNorm.filter(Boolean));
+      tiles.forEach(t=>{
+        const competing = t.divNorm && active.has(t.divNorm);
+        t.el.dataset.competing = competing ? 'true':'false';
+        t.competing = competing;
+        if(competing && t.placed){ removeFromSlot(t.slotIndex); returnToTray(t); }
+      });
+    }
+
+    function returnToTray(tile){
+      tile.placed=false; tile.slotIndex=-1; tile.el.style.opacity=''; layoutTray();
+    }
+
+    function onDropOnSlot(e, slot){
+      e.preventDefault();
+      const id = e.dataTransfer.getData('text/plain');
+      const tile = tiles.get(id); if(!tile) return;
+
+      const ringIdx = parseInt(slot.dataset.ring);
+      const slotIdx = parseInt(slot.dataset.slot);
+      const globalIdx = ringIdx*SLOTS_PER_RING + slotIdx;
+
+      // division block
+      const code = ringDivisionsNorm[ringIdx]||'';
+      if(tile.divNorm && code && tile.divNorm===code){ alert('Judges competing'); return; }
+
+      // rank eligibility
+      const cat = ringCategory[ringIdx] || 'Color';
+      if(!judgeEligibleFor(cat, tile.level)) { alert('Judge rank not eligible for this ring'); return; }
+
+      // fill slot (clear previous owner if any — but we disallow if already filled by another)
+      if(slotsOccupied[globalIdx] && slotsOccupied[globalIdx]!==id) return; // ignore
+
+      // release previous
+      if(tile.placed && tile.slotIndex!==-1){ removeFromSlot(tile.slotIndex); }
+
+      slotsOccupied[globalIdx] = id;
+      tile.placed = true; tile.slotIndex = globalIdx;
+      slot.dataset.filled='true';
+      // set text to tile name and badges visual
+      slot.childNodes.forEach(n=>{ if(n.nodeType===3) n.remove(); }); // remove text nodes
+      const label = document.createElement('div'); label.textContent = tile.name + (tile.rank?` — ${tile.rank}`:'');
+      label.style.pointerEvents='none';
+      slot.insertBefore(label, slot.firstChild);
+
+      updateRingFull(ringIdx);
+      layoutTray();
+    }
+
+    // ------------------ CONTROLS ------------------
+    document.getElementById('newBtn').addEventListener('click', ()=>{
+      const str = prompt('How many rings?','12');
+      if(str===null) return;
+      const n = Math.max(1, parseInt(str,10)||12);
+      rings = n; buildRings(n);
+    });
+
+    document.getElementById('addJudgeBtn').addEventListener('click', ()=>{
+      const name = (document.getElementById('jName').value||'').trim();
+      if(!name) return alert('Enter a judge name');
+      const rank = (document.getElementById('jRank').value||'').trim();
+      const div  = (document.getElementById('jDiv').value||'').trim();
+      addJudge(name, rank, div);
+      document.getElementById('jName').value=''; document.getElementById('jRank').value=''; document.getElementById('jDiv').value='';
+    });
+
+    // CSV import (name,rank,division)
+    document.getElementById('csvInput').addEventListener('change', (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const text = reader.result; const rows = text.split(/\r?\n/).filter(Boolean);
+        rows.forEach(line=>{ const [name, rank='', division=''] = line.split(',').map(s=>s?.trim()); if(name) addJudge(name, rank, division); });
+      };
+      reader.readAsText(file);
+      e.target.value='';
+    });
+
+    // ------------------ INIT SAMPLE ------------------
+    (function init(){
+      buildRings(rings);
+      // demo judges
+      [
+        ['Sr. Master Alex Kim','7th Dan','M451829'],
+        ['Jordan Lee','3rd Dan','F231517'],
+        ['Taylor Shaw','2nd Dan','M453049'],
+        ['Morgan Diaz','4th Dan','M451829'],
+        ['Sam Patel','1st Dan',''],
+        ['Jamie Cho','3rd Dan','F231517'],
+      ].forEach(j=>addJudge(...j));
+      updateMeta();
+    })();
+  </script>
+</body>
+</html>

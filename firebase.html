@@ -1,13 +1,91 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <title>ATA Ring Judge – Firebase Sync</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>ATA Ring Judge — Firebase Live Demo</title>
+  <style>
+    :root{
+      --bg:#0b1220; --panel:#0f1b39; --ink:#e6ecff; --muted:#a6b3d1; --accent:#5b8cff; --ok:#34d399; --danger:#ef4444;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--ink);display:grid;grid-template-rows:auto 1fr;gap:16px;padding:16px}
+    header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    h1{font-size:18px;margin:0;font-weight:800}
+    button,select{border:0;border-radius:10px;padding:10px 12px;font-weight:700;background:#1b2848;color:var(--ink);cursor:pointer}
+    button.primary{background:var(--accent);color:#fff}
+    .container{display:grid;grid-template-columns:360px 1fr;gap:16px;min-height:70vh}
+    .card{background:var(--panel);border-radius:14px;padding:14px;border:1px solid rgba(255,255,255,.08)}
+    .title{font-weight:800;color:#cfe3ff;margin:0 0 10px 0}
+    ul{list-style:none;padding:0;margin:0;display:grid;gap:8px}
+    li{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px}
+    .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .muted{color:var(--muted);font-size:12px}
+    #status{font-size:12px}
+    .ok{color:var(--ok)} .err{color:var(--danger)}
+    .spacer{flex:1}
+    input[type="text"]{border:1px solid rgba(255,255,255,.15);background:#0b1b3a;color:var(--ink);border-radius:10px;padding:8px 10px;font-weight:700}
+  </style>
+</head>
+<body>
+  <header>
+    <h1>ATA Ring Judge — <span class="muted">Firebase Live Demo</span></h1>
+    <button id="newTournament" class="primary">+ New Tournament</button>
+    <select id="tournamentSelect" title="Select tournament"></select>
+    <div class="spacer"></div>
+    <span id="status" class="muted">Ready</span>
+  </header>
+
+  <div class="container">
+    <div class="card">
+      <h3 class="title">Quick Add</h3>
+      <div class="row">
+        <input id="newRingDivision" type="text" placeholder="Ring division (e.g., Ring 1 Tigers)" />
+        <select id="newRingType">
+          <option value="Tiger">Tiger</option>
+          <option value="Color">Color</option>
+          <option value="1 Degree">1 Degree</option>
+          <option value="2/3 Degree">2/3 Degree</option>
+          <option value="4/5 Degree">4/5 Degree</option>
+        </select>
+        <button id="addRing">+ Add Ring</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <input id="newJudgeName" type="text" placeholder="Judge name (include title if any)" />
+        <input id="newJudgeRank" type="text" placeholder="Judge rank (e.g., 2/3 Degree)" />
+        <button id="addJudge">+ Add Judge</button>
+      </div>
+      <p class="muted" style="margin-top:10px">Open this page in two tabs, pick the same tournament — adds in one tab appear live in the other.</p>
+    </div>
+
+    <div class="card">
+      <div class="row">
+        <h3 class="title" style="margin:0">Tournament Data</h3>
+        <div class="spacer"></div>
+        <span id="liveBadge" class="muted">not connected</span>
+      </div>
+      <div class="row" style="gap:16px;margin-top:8px">
+        <div style="min-width:240px">
+          <h4 class="muted" style="margin:0 0 6px 0">Rings</h4>
+          <ul id="rings"></ul>
+        </div>
+        <div style="min-width:240px">
+          <h4 class="muted" style="margin:0 0 6px 0">Judges</h4>
+          <ul id="judges"></ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
-    import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+    import {
+      getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot,
+      serverTimestamp
+    } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
-    // Your Firebase config
+    // ---- Your Firebase config ----
     const firebaseConfig = {
       apiKey: "AIzaSyCBaGMG94xzLfQSW7vFosHzt_hUtytZips",
       authDomain: "ataringjudge.firebaseapp.com",
@@ -21,99 +99,140 @@
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
 
-    const tournamentSelect = document.getElementById("tournamentSelect");
-    const ringList = document.getElementById("rings");
-    const judgeList = document.getElementById("judges");
+    // ---- UI refs ----
+    const sel = (id)=>document.getElementById(id);
+    const tournamentSelect = sel("tournamentSelect");
+    const statusEl = sel("status");
+    const liveBadge = sel("liveBadge");
+    const ringList = sel("rings");
+    const judgeList = sel("judges");
+    const newRingDivision = sel("newRingDivision");
+    const newRingType = sel("newRingType");
+    const newJudgeName = sel("newJudgeName");
+    const newJudgeRank = sel("newJudgeRank");
 
-    let unsubscribe = null;
+    let unsubAll = null; // unsubscribe from current tournament
+    const setStatus = (msg, cls="muted") => { statusEl.className = cls; statusEl.textContent = msg; };
 
+    // ---- Load & subscribe to tournament list ----
     async function loadTournaments() {
-      const tournamentsCol = collection(db, "tournaments");
-      const snapshot = await getDocs(tournamentsCol);
-      tournamentSelect.innerHTML = "";
-      snapshot.forEach(docSnap => {
-        const opt = document.createElement("option");
-        opt.value = docSnap.id;
-        opt.textContent = docSnap.data().name;
-        tournamentSelect.appendChild(opt);
-      });
+      try {
+        const snap = await getDocs(collection(db, "tournaments"));
+        tournamentSelect.innerHTML = "";
+        if (snap.empty) {
+          const opt = document.createElement("option");
+          opt.value = "";
+          opt.textContent = "— no tournaments —";
+          tournamentSelect.appendChild(opt);
+          setStatus("No tournaments yet. Click + New Tournament.", "muted");
+          return;
+        }
+        snap.forEach(d => {
+          const opt = document.createElement("option");
+          opt.value = d.id;
+          opt.textContent = d.data().name || d.id;
+          tournamentSelect.appendChild(opt);
+        });
+        // auto-select first
+        tournamentSelect.value = tournamentSelect.value || tournamentSelect.options[0].value;
+        subscribeTournament(tournamentSelect.value);
+      } catch (e) {
+        setStatus(`Error loading tournaments: ${e.message}`, "err");
+        console.error(e);
+      }
     }
 
     function subscribeTournament(id) {
-      if (unsubscribe) unsubscribe();
+      if (!id) return;
+      if (unsubAll) unsubAll();
+
       const ref = doc(db, "tournaments", id);
-      unsubscribe = onSnapshot(ref, (docSnap) => {
-        if (docSnap.exists()) {
-          render(docSnap.data());
+      liveBadge.textContent = "connecting…";
+      unsubAll = onSnapshot(ref, (docSnap) => {
+        if (!docSnap.exists()) {
+          setStatus("Tournament not found.", "err");
+          ringList.innerHTML = "";
+          judgeList.innerHTML = "";
+          liveBadge.textContent = "not connected";
+          return;
         }
+        const data = docSnap.data();
+        render(data);
+        setStatus(`Live: ${data.name}`, "ok");
+        liveBadge.textContent = "live";
+        liveBadge.className = "ok";
+      }, (err) => {
+        setStatus(`Live error: ${err.message}`, "err");
+        liveBadge.textContent = "error";
+        liveBadge.className = "err";
       });
     }
 
     function render(data) {
-      ringList.innerHTML = data.rings.map(r => `<li>${r.division} (${r.type})</li>`).join("");
-      judgeList.innerHTML = data.judges.map(j => `<li>${j.name} – ${j.rank}</li>`).join("");
+      ringList.innerHTML = (data.rings || [])
+        .map(r => `<li><b>${r.division || "Untitled"}</b> <span class="muted">(${r.type || "Type?"})</span></li>`)
+        .join("");
+      judgeList.innerHTML = (data.judges || [])
+        .map(j => `<li><b>${j.name || "Unnamed"}</b> <span class="muted">— ${j.rank || ""}</span></li>`)
+        .join("");
     }
 
-    document.getElementById("newTournament").onclick = async () => {
+    // ---- Button handlers ----
+    sel("newTournament").onclick = async () => {
       const name = prompt("Tournament name?");
       if (!name) return;
       const ref = doc(collection(db, "tournaments"));
-      await setDoc(ref, {
-        name,
-        createdAt: new Date().toISOString(),
-        rings: [],
-        judges: []
-      });
-      await loadTournaments();
-      tournamentSelect.value = ref.id;
-      subscribeTournament(ref.id);
+      try {
+        await setDoc(ref, {
+          name, createdAt: serverTimestamp(),
+          rings: [], judges: []
+        });
+        await loadTournaments();
+        tournamentSelect.value = ref.id;
+        subscribeTournament(ref.id);
+      } catch (e) {
+        setStatus(`Create error: ${e.message}`, "err");
+      }
     };
 
-    tournamentSelect.onchange = () => {
-      subscribeTournament(tournamentSelect.value);
-    };
+    tournamentSelect.onchange = () => subscribeTournament(tournamentSelect.value);
 
-    document.getElementById("addRing").onclick = async () => {
+    sel("addRing").onclick = async () => {
       const id = tournamentSelect.value;
-      if (!id) return;
+      if (!id) return alert("Pick a tournament first.");
       const ref = doc(db, "tournaments", id);
-      const division = prompt("Division name?");
-      const type = prompt("Type (Tiger, Color, 1st Degree, etc)?");
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
-      const data = snap.data();
-      data.rings.push({ division, type, judges: [] });
-      await setDoc(ref, data);
+      try {
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        data.rings = data.rings || [];
+        data.rings.push({ division: newRingDivision.value.trim() || "Untitled", type: newRingType.value, judges: [] });
+        await setDoc(ref, data);
+        newRingDivision.value = "";
+      } catch (e) {
+        setStatus(`Add ring error: ${e.message}`, "err");
+      }
     };
 
-    document.getElementById("addJudge").onclick = async () => {
+    sel("addJudge").onclick = async () => {
       const id = tournamentSelect.value;
-      if (!id) return;
+      if (!id) return alert("Pick a tournament first.");
       const ref = doc(db, "tournaments", id);
-      const name = prompt("Judge name?");
-      const rank = prompt("Judge rank?");
-      const snap = await getDoc(ref);
-      if (!snap.exists()) return;
-      const data = snap.data();
-      data.judges.push({ name, rank });
-      await setDoc(ref, data);
+      try {
+        const snap = await getDoc(ref);
+        if (!snap.exists()) return;
+        const data = snap.data();
+        data.judges = data.judges || [];
+        data.judges.push({ name: newJudgeName.value.trim() || "Unnamed", rank: newJudgeRank.value.trim() });
+        await setDoc(ref, data);
+        newJudgeName.value = ""; newJudgeRank.value = "";
+      } catch (e) {
+        setStatus(`Add judge error: ${e.message}`, "err");
+      }
     };
 
-    // First load
+    // ---- Start ----
     loadTournaments();
   </script>
-</head>
-<body>
-  <h1>ATA Ring Judge – Firebase Sync Demo</h1>
-  <button id="newTournament">+ New Tournament</button>
-  <select id="tournamentSelect"></select>
-  <button id="addRing">+ Add Ring</button>
-  <button id="addJudge">+ Add Judge</button>
-
-  <h2>Rings</h2>
-  <ul id="rings"></ul>
-
-  <h2>Judges</h2>
-  <ul id="judges"></ul>
 </body>
 </html>

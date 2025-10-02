@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>ATA Ring Judge – Firebase Sync</title>
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+    import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+
+    // Your Firebase config
+    const firebaseConfig = {
+      apiKey: "AIzaSyCBaGMG94xzLfQSW7vFosHzt_hUtytZips",
+      authDomain: "ataringjudge.firebaseapp.com",
+      projectId: "ataringjudge",
+      storageBucket: "ataringjudge.firebasestorage.app",
+      messagingSenderId: "340031439257",
+      appId: "1:340031439257:web:d09a5f52788d97c9e65308",
+      measurementId: "G-QK4CMZ27Q7"
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const tournamentSelect = document.getElementById("tournamentSelect");
+    const ringList = document.getElementById("rings");
+    const judgeList = document.getElementById("judges");
+
+    let unsubscribe = null;
+
+    async function loadTournaments() {
+      const tournamentsCol = collection(db, "tournaments");
+      const snapshot = await getDocs(tournamentsCol);
+      tournamentSelect.innerHTML = "";
+      snapshot.forEach(docSnap => {
+        const opt = document.createElement("option");
+        opt.value = docSnap.id;
+        opt.textContent = docSnap.data().name;
+        tournamentSelect.appendChild(opt);
+      });
+    }
+
+    function subscribeTournament(id) {
+      if (unsubscribe) unsubscribe();
+      const ref = doc(db, "tournaments", id);
+      unsubscribe = onSnapshot(ref, (docSnap) => {
+        if (docSnap.exists()) {
+          render(docSnap.data());
+        }
+      });
+    }
+
+    function render(data) {
+      ringList.innerHTML = data.rings.map(r => `<li>${r.division} (${r.type})</li>`).join("");
+      judgeList.innerHTML = data.judges.map(j => `<li>${j.name} – ${j.rank}</li>`).join("");
+    }
+
+    document.getElementById("newTournament").onclick = async () => {
+      const name = prompt("Tournament name?");
+      if (!name) return;
+      const ref = doc(collection(db, "tournaments"));
+      await setDoc(ref, {
+        name,
+        createdAt: new Date().toISOString(),
+        rings: [],
+        judges: []
+      });
+      await loadTournaments();
+      tournamentSelect.value = ref.id;
+      subscribeTournament(ref.id);
+    };
+
+    tournamentSelect.onchange = () => {
+      subscribeTournament(tournamentSelect.value);
+    };
+
+    document.getElementById("addRing").onclick = async () => {
+      const id = tournamentSelect.value;
+      if (!id) return;
+      const ref = doc(db, "tournaments", id);
+      const division = prompt("Division name?");
+      const type = prompt("Type (Tiger, Color, 1st Degree, etc)?");
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      data.rings.push({ division, type, judges: [] });
+      await setDoc(ref, data);
+    };
+
+    document.getElementById("addJudge").onclick = async () => {
+      const id = tournamentSelect.value;
+      if (!id) return;
+      const ref = doc(db, "tournaments", id);
+      const name = prompt("Judge name?");
+      const rank = prompt("Judge rank?");
+      const snap = await getDoc(ref);
+      if (!snap.exists()) return;
+      const data = snap.data();
+      data.judges.push({ name, rank });
+      await setDoc(ref, data);
+    };
+
+    // First load
+    loadTournaments();
+  </script>
+</head>
+<body>
+  <h1>ATA Ring Judge – Firebase Sync Demo</h1>
+  <button id="newTournament">+ New Tournament</button>
+  <select id="tournamentSelect"></select>
+  <button id="addRing">+ Add Ring</button>
+  <button id="addJudge">+ Add Judge</button>
+
+  <h2>Rings</h2>
+  <ul id="rings"></ul>
+
+  <h2>Judges</h2>
+  <ul id="judges"></ul>
+</body>
+</html>

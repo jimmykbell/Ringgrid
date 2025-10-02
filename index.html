@@ -3,401 +3,524 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ATA Judge Assignment — Rings & Judges (Live-ready)</title>
+  <title>Judge Assignment — Right Panel to Rings</title>
   <style>
-    :root {
-      --bg: #0b1220; --panel:#0f1b39; --mesh:#0a132a; --ink:#e6ecff; --muted:#a6b3d1; --accent:#5b8cff; --ok:#34d399; --warn:#f59e0b; --danger:#ef4444;
-      --ring-w: 260px; --ring-gap: 16px; --sidebar-w: 360px;
+    :root{
+      --ring-w: 220px; --ring-h: 240px; --gap: 16px;
+      --sidebar-w: 420px;
+      --bg:#0b1220; --ink:#e6ecff; --muted:#a6b3d1;
+      --accent:#5b8cff; --ok:#5de0a8; --danger:#ef4444;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
-    body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;background:var(--bg);color:var(--ink);display:grid;grid-template-rows:auto 1fr;gap:16px;padding:16px}
-    header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+    body{
+      margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color:var(--ink);background:var(--bg);
+      display:grid;grid-template-rows:auto 1fr;gap:14px;padding:14px;overflow-x:hidden;
+    }
+    /* sticky page header */
+    header{
+      display:grid;grid-template-columns:1fr auto auto auto auto;
+      gap:10px;align-items:center;
+      position:sticky;top:0;z-index:10;background:var(--bg);padding-bottom:6px;
+    }
     h1{font-size:18px;margin:0;font-weight:800}
-    input[type="text"],select{border:1px solid rgba(255,255,255,.15);background:#0b1b3a;color:var(--ink);border-radius:10px;padding:10px;font-weight:700}
-    button,label.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;background:#1b2848;color:var(--ink);cursor:pointer}
+    .tname{display:flex;align-items:center;gap:8px}
+    .tname input{width:360px;max-width:100%;background:#0b1b3a;color:var(--ink);
+      border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;font-weight:800}
+    button, label.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;background:#1b2848;color:var(--ink)}
     button.primary{background:var(--accent);color:#fff}
+    input[type="file"]{display:none}
+    .meta{color:var(--muted);font-size:13px;margin-left:6px}
 
-    .shell{display:grid;grid-template-columns:1fr var(--sidebar-w);gap:16px;min-height:80vh}
-    .left{display:grid;grid-template-rows:auto 1fr}
+    /* two panes; each pane handles its own scroll */
+    .stage{display:grid;grid-template-columns:minmax(0,1fr) var(--sidebar-w);gap:14px;min-height:0}
+    /* LEFT */
+    .grid{position:relative;border-radius:12px;background:#0a132a;padding:12px;overflow:auto;min-height:0}
+    .grid-mesh{display:grid;gap:var(--gap);grid-auto-rows:var(--ring-h);grid-template-columns:repeat(4,minmax(0,var(--ring-w)))}
+    .ring{width:var(--ring-w);height:var(--ring-h);background:#0f1b39;border-radius:14px;padding:10px;display:grid;grid-template-rows:auto auto 1fr;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+    .ring-title{display:grid;grid-template-columns:auto;gap:6px;align-items:center}
+    .ring-id{font-size:15px;font-weight:800;color:#cfe3ff}
+    .ring-meta{display:grid;grid-template-columns:1fr;gap:6px}
+    .ring-division,.ring-category{background:#0d1633;border:1px solid rgba(255,255,255,.06);color:var(--ink);border-radius:8px;padding:6px 8px;font-weight:700;min-width:0}
+    .ring-category{font-weight:800}
+    .slots{display:grid;grid-template-rows:repeat(3,1fr);gap:8px;margin-top:6px}
+    .slot{position:relative;border-radius:10px;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.18);display:grid;place-items:center;color:var(--muted);font-size:12px;text-align:center;padding:6px}
+    .slot[data-active="true"]{outline:2px solid var(--accent);outline-offset:-2px}
+    .slot[data-filled="true"]{border-style:solid;border-color:rgba(255,255,255,.28);color:#cfe3ff}
+    .slot .clear{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;background:#1b2848;color:#fff;border:1px solid rgba(255,255,255,.15);font-size:14px;line-height:18px;display:none;cursor:pointer}
+    .slot[data-filled="true"] .clear{display:inline-grid;place-items:center}
 
-    .board{position:relative;background:var(--panel);border-radius:14px;border:1px solid rgba(255,255,255,.08);padding:12px;overflow:auto}
-    .rings{display:grid;grid-template-columns:repeat(auto-fill,minmax(var(--ring-w),1fr));gap:var(--ring-gap)}
+    /* RIGHT judges panel */
+    .tray{position:relative;background:#0d1a36;border-radius:12px;padding:12px;overflow:hidden;display:grid;grid-template-rows:auto auto auto 1fr;gap:10px;min-height:0}
+    .tray-header{display:flex;gap:8px;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:2;background:#0d1a36;padding-bottom:6px}
+    .tray-title{font-size:14px;color:var(--muted);font-weight:700}
+    .search{display:grid;grid-template-columns:1fr auto;gap:8px;position:sticky;top:46px;z-index:2;background:#0d1a36;padding-bottom:6px}
+    .search input{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700}
+    .add-form{display:grid;grid-template-columns:1fr 140px 160px 160px auto;gap:8px;position:sticky;top:92px;z-index:2;background:#0d1a36;padding-bottom:6px}
+    .add-form input,.add-form select{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700}
+    .tray-scroll{position:relative;overflow-y:auto;overflow-x:hidden;border-radius:10px;background:#0b1b3a;padding:10px;min-height:0;scrollbar-gutter:stable both-edges;overscroll-behavior:contain;padding-top:180px}
+    .tray-area{position:relative;min-height:100%;overflow:visible}
 
-    .ring{background:var(--mesh);border-radius:12px;border:1px solid rgba(255,255,255,.08);padding:10px;display:grid;gap:8px;min-height:210px}
-    .ring-header{display:flex;justify-content:space-between;align-items:center;gap:8px}
-    .ring-id{font-weight:800;color:#cfe3ff}
-    .ring-status{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
-    .ring-status .box{width:16px;height:16px;border-radius:4px;border:2px solid rgba(255,255,255,.25);display:grid;place-items:center}
-    .ring[data-full="true"] .ring-status{color:var(--ok);font-weight:800}
-    .ring[data-full="true"] .ring-status .box{background:var(--ok);border-color:var(--ok)}
+    .tile{position:absolute;width:calc(100% - 16px);min-height:66px;border-radius:10px;cursor:grab;user-select:none;touch-action:none;background:linear-gradient(180deg,#b4c5ff,#7da7ff);box-shadow:0 8px 18px rgba(0,0,0,.35),inset 0 0 0 2px rgba(0,0,0,.08);display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:8px 10px;left:8px;box-sizing:border-box}
+    .tile:active{cursor:grabbing}
+    .t-name{font-weight:900;color:#0b1024;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .t-rank{font-size:12px;font-weight:700;color:#0b1024;opacity:.85}
+    .t-id{font-size:10px;opacity:.8}
+    .t-division{font-size:11px;font-weight:800;background:rgba(255,255,255,.7);color:#0b1024;padding:2px 6px;border-radius:8px;justify-self:end}
+    .tile[data-placed="true"]{background:linear-gradient(180deg,#7dfcce,#5de0a8)}
+    .tile[data-competing="true"]{filter:grayscale(1) brightness(.8);box-shadow:0 0 0 2px var(--danger) inset;cursor:not-allowed}
 
-    .ring-controls{display:grid;gap:6px}
-    .div-input{width:100%}
-
-    .slots{display:grid;gap:6px}
-    .slot{position:relative;background:rgba(255,255,255,.04);border:1px dashed rgba(255,255,255,.25);border-radius:10px;padding:10px;min-height:52px}
-    .slot[data-filled="true"]{border-style:solid;background:rgba(80,255,191,.06)}
-    .clear{position:absolute;right:6px;top:6px;border:0;background:transparent;color:#a6b3d1;font-weight:900;cursor:pointer}
-
-    .sidebar{background:var(--panel);border-radius:14px;border:1px solid rgba(255,255,255,.08);display:grid;grid-template-rows:auto 1fr;min-height:0}
-    .sidebar-head{padding:12px;display:grid;gap:8px;border-bottom:1px solid rgba(255,255,255,.06)}
-    .tray{position:relative;overflow-y:auto;overflow-x:hidden;padding:10px}
-
-    .tile{position:relative;background:linear-gradient(180deg,#b4c5ff,#7da7ff);color:#0b1024;border-radius:10px;border:1px solid rgba(0,0,0,.2);box-shadow:0 6px 16px rgba(0,0,0,.3);padding:10px;display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;margin:8px}
-    .tile .badges{display:flex;gap:6px}
-    .badge{font-size:11px;border-radius:8px;background:rgba(0,0,0,.25);color:#fff;padding:2px 6px}
-    .tile[data-competing="true"]{opacity:.4;filter:grayscale(1)}
-
-    .muted{color:var(--muted);font-size:12px}
-    .footer-tip{grid-column:1/-1;color:var(--muted);font-size:12px}
+    .hint{font-size:12px;color:var(--muted)}
   </style>
 </head>
 <body>
   <header>
-    <h1>ATA Judge Assignment — <span class="muted">Right-panel Judges → Rings</span></h1>
-    <input id="tournamentName" type="text" placeholder="Tournament name…" />
+    <div class="tname">
+      <h1>Judge Assignment — Right Panel to Rings</h1>
+      <input id="tournamentName" placeholder="Tournament name…" />
+    </div>
     <button id="newBtn" type="button" class="primary">New Rings</button>
-    <button id="addJudgeBtn" type="button">Add Judge</button>
+    <button id="addJudgeBtn" type="button" class="btn">Add Judge</button>
     <label class="btn" for="csvInput">Import Judges (CSV)</label>
-    <input id="csvInput" type="file" accept=".csv" hidden />
-    <div class="spacer"></div>
-    <span id="meta" class="muted"></span>
+    <input id="csvInput" type="file" accept=".csv" />
+    <div style="display:flex; gap:8px;">
+      <button id="saveBtn" type="button" class="btn">Save</button>
+      <button id="loadBtn" type="button" class="btn">Load</button>
+    </div>
+    <span class="meta" id="meta"></span>
   </header>
 
-  <div class="shell">
-    <div class="left">
-      <div class="board">
-        <div id="rings" class="rings"></div>
-      </div>
-      <div class="footer-tip">• Rings are auto-numbered. Type a <b>Division code</b> in a ring; judges with that code are marked <i>Competing</i> and can’t be placed. • Choose a <b>Ring Category</b> to enforce rank eligibility. • Drag judges from the right into any open slot. • Click × to remove a judge back to the list.</div>
+  <div class="stage">
+    <!-- LEFT -->
+    <div class="grid">
+      <div class="grid-mesh" id="gridMesh"></div>
     </div>
 
-    <aside class="sidebar">
-      <div class="sidebar-head">
-        <div class="row"><b>Judges (drag →)</b></div>
+    <!-- RIGHT -->
+    <aside class="tray">
+      <div class="tray-header"><div class="tray-title">Judges (drag →)</div></div>
+      <div class="search">
         <input id="searchBox" type="text" placeholder="Search judges by name…" />
-        <div class="row" style="display:grid;grid-template-columns:1fr 120px 120px;gap:8px">
-          <input id="jName" type="text" placeholder="Judge name (include title if any)" />
-          <input id="jRank" type="text" placeholder="Rank (optional)" />
-          <input id="jDiv" type="text" placeholder="Division (optional)" />
-        </div>
+        <button id="clearSearch" class="btn">Clear</button>
       </div>
-      <div id="tray" class="tray"></div>
+      <form class="add-form" id="addForm">
+        <input id="addName" type="text" placeholder="Judge name (include title if any)" required />
+        <input id="addRank" type="text" placeholder="Rank (optional)" />
+        <input id="addDivision" type="text" placeholder="Division (optional)" />
+        <select id="addEligibility">
+          <option value="">Eligibility (optional)</option>
+          <option>Tiger</option><option>Color</option><option>1 Degree</option>
+          <option>2/3 Degree</option><option>4/5 Degree</option>
+        </select>
+        <button type="submit" class="primary">Add</button>
+      </form>
+      <div class="tray-scroll"><div class="tray-area" id="trayArea"></div></div>
     </aside>
   </div>
 
+  <div class="hint">
+    • Set a ring’s <b>Division Code</b> and <b>Ring Category</b>. Changing either auto-removes invalid judges from that ring.  
+    • Use the search box to filter the judge list. • Click the × on a filled slot to remove a judge back to the list.
+  </div>
+
   <script>
-    // ------------------ STATE ------------------
-    const RINGS_PER_ROW = 4; // visual only; grid auto-fills
-    const SLOTS_PER_RING = 3;
+    /* ---------- STATE ----------- */
+    let rows=0, cols=0, rings=0;
+    const SLOTS_PER_RING=3;
+    let slotsOccupied=[]; // global slot index -> tileId|null
+    let tiles=new Map();  // id -> state
+    let idCounter=1;
 
-    let rings = 12; // default
-    let ringDivisions = [];      // per ring raw
-    let ringDivisionsNorm = [];  // normalized
-    let ringCategory = [];       // per ring category
+    const meshEl=document.getElementById('gridMesh');
+    const trayArea=document.getElementById('trayArea');
+    const metaEl=document.getElementById('meta');
+    const csvInput=document.getElementById('csvInput');
+    const addForm=document.getElementById('addForm');
+    const addName=document.getElementById('addName');
+    const addRank=document.getElementById('addRank');
+    const addDivision=document.getElementById('addDivision');
+    const addEligibility=document.getElementById('addEligibility');
+    const searchBox=document.getElementById('searchBox');
+    const clearSearchBtn=document.getElementById('clearSearch');
+    const addJudgeBtn=document.getElementById('addJudgeBtn');
+    const tNameEl=document.getElementById('tournamentName');
+    const saveBtn=document.getElementById('saveBtn');
+    const loadBtn=document.getElementById('loadBtn');
 
-    const tiles = new Map();     // id -> tile state
-    let idCounter = 1;
+    /* per-ring data */
+    let ringDivisions=[];      // raw string
+    let ringDivisionsNorm=[];  // normalized
+    let ringCategories=[];     // label
+    let ringMinLevel=[];       // numeric requirement
 
-    const ringLevels = { // minimum judge level required for a ring category
-      'Tiger': 0,
-      'Color': 0,
-      '1 Degree': 1,
-      '2/3 Degree': 2,
-      '4/5 Degree': 4,
-      '6+ Degree': 6,
-    };
-
-    // judge level parsing from rank string
-    function parseLevel(rank=""){
-      rank = (rank||"").toLowerCase();
-      if(/6/.test(rank)) return 6;
-      if(/4\/?5|4\s*\/\s*5/.test(rank)) return 4;
-      if(/2\/?3|2\s*\/\s*3/.test(rank)) return 2;
-      if(/1st|1\s*degree|first/.test(rank)) return 1;
-      if(/color|tiger/.test(rank)) return 0;
-      // default unknown -> very high so they can judge anything unless specified
-      return 6;
+    /* ---------- HELPERS ---------- */
+    const normalizeDivision = s => (s||'').toString().trim().replace(/\s+/g,'').toUpperCase();
+    function catToMinLevel(cat){
+      switch((cat||'').toLowerCase()){
+        case 'tiger': return 0;       // 1st degree judges allowed (Tiger/Color later rule)
+        case 'color': return 0;
+        case '1 degree': return 1;
+        case '2/3 degree': return 2;
+        case '4/5 degree': return 4;
+        default: return 0;
+      }
     }
-
-    function categoryMinLevel(cat){
-      return ringLevels[cat] ?? 0;
+    function levelFromEligibility(sel){
+      switch((sel||'').toLowerCase()){
+        case 'tiger': return 0;
+        case 'color': return 0;
+        case '1 degree': return 1;
+        case '2/3 degree': return 2;
+        case '4/5 degree': return 4;
+        default: return 6;  // treat unknown as senior so they aren't blocked accidentally
+      }
     }
-
-    // Eligibility matrix per your rules
-    function judgeEligibleFor(cat, judgeLevel){
-      const min = categoryMinLevel(cat);
-      // Special: 1st Degree judges only Tiger/Color (min 0) — block them from 1 Degree rings
-      if(judgeLevel===1) return (cat==='Tiger' || cat==='Color');
-      if(judgeLevel===2) return (cat==='1 Degree' || cat==='2/3 Degree');
-      if(judgeLevel===4) return (['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree'].includes(cat));
-      if(judgeLevel>=6) return true;
-      // Color/Tiger level (0) cannot judge anything unless explicitly allowed above
+    // rank hierarchy per your rules
+    function judgeEligibleFor(cat, level){
+      if(level>=6) return true;
+      if(level===4) return ['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree'].includes(cat);
+      if(level===2) return (cat==='1 Degree' || cat==='2/3 Degree');
+      if(level===1) return (cat==='Tiger' || cat==='Color');
       return false;
     }
 
-    // division normalization
-    const normalizeDivision = (s)=> (s||'').trim().toLowerCase();
-
-    // occupied slots map by global slot index -> tileId
-    let slotsOccupied = [];
-
-    // ------------------ DOM ------------------
-    const ringsEl = document.getElementById('rings');
-    const trayEl = document.getElementById('tray');
-    const metaEl = document.getElementById('meta');
-    const searchBox = document.getElementById('searchBox');
-
-    // ------------------ RINGS RENDER ------------------
-    function buildRings(n){
-      ringsEl.innerHTML = '';
-      ringDivisions = new Array(n).fill('');
-      ringDivisionsNorm = new Array(n).fill('');
-      ringCategory = new Array(n).fill('Color');
-      slotsOccupied = new Array(n * SLOTS_PER_RING).fill(null);
-
-      for(let r=0;r<n;r++){
-        ringsEl.appendChild(buildRingCard(r));
-      }
-      updateMeta();
+    /* ---------- RINGS / GRID ---------- */
+    function newLayout(){
+      const rStr=prompt('How many rings?','12'); if(rStr===null) return;
+      rings=Math.max(1, parseInt(rStr,10)||0);
+      cols=Math.min(4, Math.ceil(Math.sqrt(rings)));
+      rows=Math.ceil(rings/cols);
+      renderGrid(rows, cols, rings);
+      metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols}`;
     }
 
-    function buildRingCard(ringIdx){
-      const ring = document.createElement('div');
-      ring.className = 'ring';
-      ring.dataset.index = ringIdx;
-      ring.dataset.full = 'false';
+    function renderGrid(r,c,total){
+      meshEl.innerHTML='';
+      ringDivisions=new Array(total).fill('');
+      ringDivisionsNorm=new Array(total).fill('');
+      ringCategories=new Array(total).fill('Color');
+      ringMinLevel=new Array(total).fill(catToMinLevel('Color'));
 
-      const head = document.createElement('div');
-      head.className = 'ring-header';
-      const id = document.createElement('div'); id.className='ring-id'; id.textContent = `Ring ${ringIdx+1}`;
-      const status = document.createElement('div'); status.className='ring-status'; status.innerHTML = `<span class="box">✓</span> FULL`;
-      head.append(id,status);
+      for(let i=0;i<total;i++){
+        const ringIdx=i;
+        const ring=document.createElement('div');
+        ring.className='ring';
 
-      const controls = document.createElement('div'); controls.className='ring-controls';
-      const divInput = document.createElement('input'); divInput.className='div-input'; divInput.placeholder='Division code (e.g., M451829)';
-      divInput.addEventListener('change', ()=> onDivisionChange(ringIdx, divInput.value));
+        const title=document.createElement('div'); title.className='ring-title';
+        const idBadge=document.createElement('div'); idBadge.className='ring-id'; idBadge.textContent=`Ring ${ringIdx+1}`;
+        title.appendChild(idBadge);
 
-      const catSel = document.createElement('select');
-      ['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree','6+ Degree'].forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;catSel.appendChild(o);});
-      catSel.value = 'Color';
-      catSel.addEventListener('change', ()=> onCategoryChange(ringIdx, catSel.value));
+        const meta=document.createElement('div'); meta.className='ring-meta';
+        const divInput=document.createElement('input'); divInput.className='ring-division'; divInput.placeholder='Division code (e.g., M451829)'; divInput.value='';
+        divInput.addEventListener('input',()=>onDivisionChange(ringIdx, divInput.value));
+        meta.appendChild(divInput);
 
-      controls.append(divInput, catSel);
+        const cat=document.createElement('select'); cat.className='ring-category';
+        ['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree'].forEach(opt=>{const o=document.createElement('option');o.value=opt;o.textContent=opt;cat.appendChild(o);});
+        cat.value='Color';
+        cat.addEventListener('change',()=>onCategoryChange(ringIdx, cat.value));
+        meta.appendChild(cat);
 
-      const slots = document.createElement('div'); slots.className='slots';
-      for(let s=0;s<SLOTS_PER_RING;s++){
-        const slot = document.createElement('div');
-        slot.className='slot';
-        slot.draggable=false;
-        slot.dataset.ring = ringIdx;
-        slot.dataset.slot = s;
-        slot.textContent = `Judge slot ${s+1}`;
-        const x = document.createElement('button'); x.className='clear'; x.textContent='×'; x.title='Remove judge'; x.addEventListener('click', ()=> clearSlot(slot));
-        slot.appendChild(x);
-        slot.addEventListener('dragover', (e)=> e.preventDefault());
-        slot.addEventListener('drop', (e)=> onDropOnSlot(e, slot));
-        slots.appendChild(slot);
+        const slots=document.createElement('div'); slots.className='slots';
+        for(let s=0;s<SLOTS_PER_RING;s++){
+          const slot=document.createElement('div'); slot.className='slot'; slot.dataset.ring=ringIdx; slot.dataset.slot=s; slot.textContent=`Judge slot ${s+1}`;
+          const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×';
+          slot.appendChild(clear); slots.appendChild(slot);
+        }
+
+        ring.append(title, meta, slots); meshEl.appendChild(ring);
       }
-
-      ring.append(head, controls, slots);
-      return ring;
-    }
-
-    function updateRingFull(ringIdx){
-      let count = 0;
-      for(let s=0;s<SLOTS_PER_RING;s++) if(slotsOccupied[ringIdx*SLOTS_PER_RING+s]) count++;
-      const ring = ringsEl.querySelector(`.ring[data-index="${ringIdx}"]`);
-      if(ring) ring.dataset.full = (count>=SLOTS_PER_RING) ? 'true':'false';
+      slotsOccupied=new Array(total*SLOTS_PER_RING).fill(null);
     }
 
     function onDivisionChange(ringIdx, code){
-      ringDivisions[ringIdx] = code;
-      ringDivisionsNorm[ringIdx] = normalizeDivision(code);
-      // Pop out any ineligible judges due to division
+      ringDivisions[ringIdx]=code; ringDivisionsNorm[ringIdx]=normalizeDivision(code);
+      // pop any judges in this ring with that division
       for(let s=0;s<SLOTS_PER_RING;s++){
-        const idx = ringIdx*SLOTS_PER_RING+s;
-        const id = slotsOccupied[idx];
-        if(!id) continue;
-        const t = tiles.get(id);
-        if(!t) continue;
+        const idx=ringIdx*SLOTS_PER_RING+s;
+        const id=slotsOccupied[idx]; if(!id) continue;
+        const t=tiles.get(id); if(!t) continue;
         if(t.divNorm && ringDivisionsNorm[ringIdx] && t.divNorm===ringDivisionsNorm[ringIdx]){
-          removeFromSlot(idx);
-          returnToTray(t);
+          slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t);
         }
       }
-      recomputeCompeting();
-      updateRingFull(ringIdx);
+      recomputeCompeting(); updateRingFull(ringIdx); layoutTray();
     }
 
     function onCategoryChange(ringIdx, cat){
-      ringCategory[ringIdx] = cat;
-      // Auto-remove too-low ranks
+      ringCategories[ringIdx]=cat;
+      // auto-remove judges who no longer qualify
       for(let s=0;s<SLOTS_PER_RING;s++){
-        const idx = ringIdx*SLOTS_PER_RING+s;
-        const id = slotsOccupied[idx];
-        if(!id) continue;
-        const t = tiles.get(id);
-        if(!t) continue;
-        if(!judgeEligibleFor(cat, t.level)){
-          removeFromSlot(idx);
-          returnToTray(t);
-        }
+        const idx=ringIdx*SLOTS_PER_RING+s;
+        const id=slotsOccupied[idx]; if(!id) continue;
+        const t=tiles.get(id); if(!t) continue;
+        if(!judgeEligibleFor(cat, t.level)){ slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t); }
       }
-      updateRingFull(ringIdx);
+      updateRingFull(ringIdx); layoutTray();
     }
 
-    function clearSlot(slot){
-      const idx = parseInt(slot.dataset.ring)*SLOTS_PER_RING + parseInt(slot.dataset.slot);
-      const id = slotsOccupied[idx]; if(!id) return;
-      const tile = tiles.get(id); if(!tile) return;
-      removeFromSlot(idx);
-      returnToTray(tile);
+    function resetSlotUI(globalIdx){
+      const slot=document.querySelectorAll('.slot')[globalIdx];
+      if(!slot) return;
+      const slotNum=(globalIdx%SLOTS_PER_RING)+1;
+      slot.dataset.filled='false';
+      slot.textContent=`Judge slot ${slotNum}`;
+      const again=document.createElement('button'); again.className='clear'; again.type='button'; again.title='Remove judge'; again.textContent='×';
+      slot.appendChild(again);
     }
 
-    function removeFromSlot(idx){
-      const ringIdx = Math.floor(idx / SLOTS_PER_RING);
-      const sIdx = idx % SLOTS_PER_RING;
-      slotsOccupied[idx]=null;
-      const slot = ringsEl.querySelectorAll('.slot')[idx];
-      if(slot){ slot.dataset.filled='false'; slot.childNodes.forEach(n=>{ if(n.nodeType===3) n.remove(); }); slot.firstChild && (slot.firstChild.textContent='×'); slot.insertBefore(document.createTextNode(`Judge slot ${sIdx+1}`), slot.firstChild); }
-      updateRingFull(ringIdx);
+    function updateRingFull(ringIdx){
+      let count=0;
+      for(let s=0;s<SLOTS_PER_RING;s++){ if(slotsOccupied[ringIdx*SLOTS_PER_RING+s]) count++; }
+      const ringEl=document.querySelectorAll('.ring')[ringIdx];
+      if(ringEl) ringEl.dataset.full=(count>=SLOTS_PER_RING)?'true':'false';
     }
 
-    function updateMeta(){
-      metaEl.textContent = `Rings: ${rings}`;
+    /* ---------- JUDGES ---------- */
+    function clearTiles(){ tiles.forEach(t=>t.el.remove()); tiles.clear(); trayArea.innerHTML=''; }
+    function spawnJudge(name, rank, division, eligibilityLabel){
+      const id=`J${idCounter++}`; const el=document.createElement('div'); el.className='tile'; el.dataset.id=id; trayArea.appendChild(el);
+      const divText=(division||'').trim(); const eligText=(eligibilityLabel||'').trim();
+      const state={ id, name, rank, division:divText, divNorm:normalizeDivision(divText), eligibility:eligText, level:levelFromEligibility(eligText), competing:false, el, placed:false, slotIndex:-1, startLeft:10, startTop:10 };
+      tiles.set(id,state);
+      el.innerHTML=`<div><div class="t-name">${name||'Unnamed'}</div><div class="t-rank">${rank||''}</div></div><div class="t-id">${divText?`<span class='t-division'>${divText}</span>`:''}${eligText?` <span class='t-division'>${eligText}</span>`:''}</div>`;
+      enableDrag(state); recomputeCompeting(); layoutTray();
     }
 
-    // ------------------ JUDGES ------------------
-    function addJudge(name, rank='', division=''){
-      const id = `J${idCounter++}`;
-      const el = document.createElement('div');
-      el.className='tile'; el.draggable=true; el.dataset.id = id;
-      el.innerHTML = `<div class="name"></div><div class="badges"></div>`;
-      el.querySelector('.name').textContent = name;
-      const badges = el.querySelector('.badges');
-      const b1 = document.createElement('span'); b1.className='badge'; b1.textContent = (rank||''); badges.appendChild(b1);
-      const b2 = document.createElement('span'); b2.className='badge'; b2.textContent = (division||''); badges.appendChild(b2);
-
-      trayEl.appendChild(el);
-
-      const tile = { id, el, name, rank, division, divNorm: normalizeDivision(division), level: parseLevel(rank), placed:false, slotIndex:-1 };
-      tiles.set(id, tile);
-
-      el.addEventListener('dragstart', (e)=>{
-        e.dataTransfer.setData('text/plain', id);
-      });
-
-      layoutTray();
-      recomputeCompeting();
-      return tile;
-    }
+    function returnToTray(tile){ tile.placed=false; tile.slotIndex=-1; tile.el.dataset.placed='false'; }
 
     function layoutTray(){
-      const q = (searchBox.value||'').toLowerCase();
-      const children = Array.from(trayEl.children);
-      children.forEach(ch=>{
-        const id = ch.dataset.id; const t = tiles.get(id);
-        const match = !q || (t && (t.name.toLowerCase().includes(q)));
-        ch.style.display = (t && !t.placed && match) ? 'grid' : 'none';
+      const q=(searchBox.value||'').trim().toLowerCase();
+      let y=10;
+      const parent=trayArea.parentElement; // .tray-scroll
+      const styles=getComputedStyle(parent);
+      const pLeft=parseFloat(styles.paddingLeft)||0; const pRight=parseFloat(styles.paddingRight)||0;
+      const usableW=Math.max(0, parent.clientWidth - pLeft - pRight - 20);  /* tighter to avoid overhang */
+      const leftPad=pLeft+8;
+      tiles.forEach(t=>{
+        if(t.placed) return;
+        const match=!q || (t.name && t.name.toLowerCase().includes(q));
+        t.el.style.display=match?'grid':'none';
+        if(match){
+          t.el.style.width=usableW+'px';
+          t.el.style.left=leftPad+'px';
+          t.el.style.top=y+'px';
+          t.startLeft=10; t.startTop=y;
+          y += (t.el.offsetHeight||66) + 10;
+        }
       });
     }
+
+    /* ---------- DRAG/DROP ---------- */
+    function enableDrag(tile){
+      let startX=0,startY=0,originLeft=0,originTop=0,dragging=false;
+      const onDown=(e)=>{ e.preventDefault(); tile.el.setPointerCapture(e.pointerId); dragging=true; startX=e.clientX; startY=e.clientY; const rect=tile.el.getBoundingClientRect(); const parentRect=tile.el.offsetParent.getBoundingClientRect(); originLeft=rect.left-parentRect.left; originTop=rect.top-parentRect.top; tile.el.style.transition='none'; tile.el.style.zIndex=1000; };
+      const onMove=(e)=>{ if(!dragging) return; const dx=e.clientX-startX; const dy=e.clientY-startY; tile.el.style.left=originLeft+dx+'px'; tile.el.style.top=originTop+dy+'px'; highlightNearestSlot(e.clientX,e.clientY); };
+      const onUp=(e)=>{ if(!dragging) return; dragging=false; tile.el.releasePointerCapture(e.pointerId); tile.el.style.transition='left .12s ease, top .12s ease'; tile.el.style.zIndex=''; const ok=trySnapToNearestSlot(tile,e.clientX,e.clientY); clearSlotHighlights(); if(!ok) bounceBack(tile); };
+      tile.el.addEventListener('pointerdown', onDown);
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+    }
+
+    function highlightNearestSlot(x,y){ clearSlotHighlights(); const slot=findBestSlot(x,y); if(slot && !slotIsFilled(slot)) slot.dataset.active='true'; }
+    function clearSlotHighlights(){ document.querySelectorAll('.slot[data-active="true"]').forEach(s=>s.dataset.active='false'); }
+    function slotIndexFromDataset(slot){ const ring=parseInt(slot.dataset.ring,10); const s=parseInt(slot.dataset.slot,10); return ring*SLOTS_PER_RING+s; }
+    function slotIsFilled(slot){ const idx=slotIndexFromDataset(slot); return !!slotsOccupied[idx]; }
+
+    function trySnapToNearestSlot(tile, clientX, clientY){
+      const slot=findBestSlot(clientX, clientY); if(!slot) return false;
+      const idx=slotIndexFromDataset(slot); const ringIdx=parseInt(slot.dataset.ring,10);
+      const codeNorm=ringDivisionsNorm[ringIdx]||'';
+      if(tile.competing || (codeNorm && tile.divNorm && tile.divNorm===codeNorm)){ alert('Judges competing'); return false; }
+      const cat=ringCategories[ringIdx]||'Color';
+      if(!judgeEligibleFor(cat, tile.level)){ alert('Judge rank not eligible for this ring'); return false; }
+      if(slotsOccupied[idx] && slotsOccupied[idx]!==tile.id) return false;
+
+      if(tile.placed && tile.slotIndex!==-1){ resetSlotUI(tile.slotIndex); slotsOccupied[tile.slotIndex]=null; }
+
+      const slotRect=slot.getBoundingClientRect(); const parentRect=tile.el.offsetParent.getBoundingClientRect();
+      const left=slotRect.left-parentRect.left + (slotRect.width - tile.el.offsetWidth)/2;
+      const top =slotRect.top -parentRect.top  + (slotRect.height- tile.el.offsetHeight)/2;
+      tile.el.style.left=left+'px'; tile.el.style.top=top+'px';
+
+      slotsOccupied[idx]=tile.id; tile.placed=true; tile.slotIndex=idx; tile.el.dataset.placed='true';
+      slot.dataset.filled='true'; slot.textContent=`${tile.name}${tile.rank?' — '+tile.rank:''}`;
+      const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×'; slot.appendChild(clear);
+      updateRingFull(ringIdx); layoutTray();
+      return true;
+    }
+
+    function findBestSlot(x,y){
+      const el=document.elementFromPoint(x,y);
+      let candidate=el && el.classList && el.classList.contains('slot') ? el : null;
+      if(candidate && !slotIsFilled(candidate)) return candidate;
+      const slots=Array.from(document.querySelectorAll('.slot'));
+      let best=null, bestD=Infinity;
+      for(const s of slots){
+        if(slotIsFilled(s)) continue;
+        const r=s.getBoundingClientRect(); const cx=r.left+r.width/2; const cy=r.top+r.height/2;
+        const dx=cx-x, dy=cy-y; const d=dx*dx+dy*dy; if(d<bestD){ bestD=d; best=s; }
+      }
+      return best;
+    }
+
+    function bounceBack(tile){
+      if(tile.placed && tile.slotIndex!==-1) return;
+      tile.el.style.left=tile.startLeft+'px'; tile.el.style.top=tile.startTop+'px'; tile.el.dataset.placed='false';
+    }
+
+    /* one-time delegation for all future × buttons */
+    meshEl.addEventListener('click', (e)=>{
+      const btn=e.target.closest('.clear'); if(!btn) return;
+      const slot=btn.closest('.slot'); const idx=slotIndexFromDataset(slot);
+      const id=slotsOccupied[idx]; if(!id) return;
+      const tile=tiles.get(id); slotsOccupied[idx]=null; resetSlotUI(idx);
+      if(tile) returnToTray(tile); updateRingFull(parseInt(slot.dataset.ring,10)); layoutTray();
+    });
+
+    /* ---------- CSV IMPORT ---------- */
+    csvInput.addEventListener('change', async (e)=>{
+      const file=e.target.files[0]; if(!file) return;
+      const text=await file.text(); const rows=parseCSV(text); if(!rows.length) return;
+      for(const r of rows){
+        const [name, rank, division, eligibility]=r;
+        if(name) spawnJudge(name.trim(), (rank||'').trim(), (division||'').trim(), (eligibility||'').trim());
+      }
+      metaEl.textContent=`${tiles.size} judges loaded.`; csvInput.value='';
+    });
+    function parseCSV(text){
+      const lines=text.split(/\r?\n/).filter(l=>l.trim().length); const rows=[];
+      for(let i=0;i<lines.length;i++){ const line=lines[i]; if(i===0 && /^\s*name\s*,/i.test(line)) continue; rows.push(parseCSVLine(line)); }
+      return rows;
+    }
+    function parseCSVLine(line){
+      const out=[]; let cur=''; let inQ=false;
+      for(let i=0;i<line.length;i++){
+        const ch=line[i];
+        if(ch==='"'){ if(inQ && line[i+1]==='"'){ cur+='"'; i++; } else { inQ=!inQ; } }
+        else if(ch===',' && !inQ){ out.push(cur); cur=''; }
+        else { cur+=ch; }
+      }
+      out.push(cur); return out;
+    }
+
+    /* ---------- ADD / SEARCH ---------- */
+    addForm.addEventListener('submit',(e)=>{
+      e.preventDefault();
+      const name=addName.value.trim(); const rank=addRank.value.trim(); const division=addDivision.value.trim(); const elig=addEligibility.value.trim();
+      if(!name) return;
+      spawnJudge(name, rank, division, elig);
+      addName.value=''; addRank.value=''; addDivision.value=''; addEligibility.value=''; searchBox.value='';
+      layoutTray(); trayArea.parentElement.scrollTop=trayArea.scrollHeight;
+    });
+
+    addJudgeBtn.addEventListener('click', ()=>{
+      const name=prompt('Judge name (include title if any):'); if(name===null) return;
+      const trimmed=name.trim(); if(!trimmed){ alert('Name is required.'); return; }
+      const rank=prompt('Rank (optional):')||''; const division=prompt('Division code (optional):')||''; const elig=prompt('Eligibility (Tiger, Color, 1 Degree, 2/3 Degree, 4/5 Degree) — optional:')||'';
+      spawnJudge(trimmed, rank.trim(), division.trim(), elig.trim());
+      searchBox.value=''; layoutTray(); trayArea.parentElement.scrollTop=trayArea.scrollHeight;
+    });
 
     searchBox.addEventListener('input', layoutTray);
+    document.getElementById('clearSearch').addEventListener('click', ()=>{ searchBox.value=''; layoutTray(); });
 
+    document.getElementById('newBtn').addEventListener('click', (e)=>{ e.preventDefault(); newLayout(); });
+
+    /* ---------- SAVE / LOAD (localStorage for now) ---------- */
+    saveBtn.addEventListener('click', ()=>{
+      const name=(tNameEl.value||'').trim();
+      if(!name){ alert('Enter a tournament name first.'); return; }
+      const data=snapshotState(name);
+      const key=`tournaments.${name}`;
+      localStorage.setItem(key, JSON.stringify(data));
+      const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]');
+      if(!idx.includes(name)){ idx.push(name); localStorage.setItem('tournaments.index', JSON.stringify(idx)); }
+      alert('Tournament saved.');
+    });
+
+    loadBtn.addEventListener('click', ()=>{
+      const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]');
+      if(!idx.length){ alert('No saved tournaments yet.'); return; }
+      const name=prompt(`Load which tournament?\n${idx.join(', ')}`); if(!name) return;
+      const data=JSON.parse(localStorage.getItem(`tournaments.${name}`)||'null');
+      if(!data){ alert('Not found.'); return; }
+      restoreState(data); alert(`Loaded: ${name}`);
+    });
+
+    function snapshotState(name){
+      const judges=Array.from(tiles.values()).map(t=>({ id:t.id, name:t.name, rank:t.rank, division:t.division, eligibility:t.eligibility, level:t.level, placed:t.placed, slotIndex:t.slotIndex }));
+      return { name, rings, rows, cols, ringDivisions, ringCategories, ringMinLevel, judges };
+    }
+
+    function placeTileAtSlotIndex(tile, idx){
+      const slot=document.querySelectorAll('.slot')[idx]; if(!slot) return;
+      const slotRect=slot.getBoundingClientRect(); const parentRect=tile.el.offsetParent.getBoundingClientRect();
+      const left=slotRect.left-parentRect.left + (slotRect.width - tile.el.offsetWidth)/2;
+      const top =slotRect.top -parentRect.top  + (slotRect.height- tile.el.offsetHeight)/2;
+      tile.el.style.left=left+'px'; tile.el.style.top=top+'px';
+    }
+
+    function restoreState(data){
+      tNameEl.value=data.name||'';
+      rings=data.rings; rows=data.rows; cols=Math.min(4, data.cols || Math.ceil(Math.sqrt(rings)));
+      renderGrid(rows, cols, rings);
+      ringDivisions=data.ringDivisions || new Array(rings).fill('');
+      ringDivisionsNorm=ringDivisions.map(normalizeDivision);
+      ringCategories=data.ringCategories || new Array(rings).fill('Color');
+      ringMinLevel=(data.ringMinLevel && data.ringMinLevel.length===rings) ? data.ringMinLevel : ringCategories.map(catToMinLevel);
+
+      document.querySelectorAll('.ring').forEach((ringEl,i)=>{
+        const input=ringEl.querySelector('.ring-division'); if(input) input.value=ringDivisions[i]||'';
+        const sel=ringEl.querySelector('.ring-category'); if(sel) sel.value=ringCategories[i]||'Color';
+      });
+
+      clearTiles(); slotsOccupied=new Array(rings*SLOTS_PER_RING).fill(null); idCounter=1;
+      for(const j of (data.judges||[])){
+        spawnJudge(j.name, j.rank, j.division, j.eligibility);
+        const t=tiles.get(`J${idCounter-1}`); if(!t) continue;
+        t.level=levelFromEligibility(t.eligibility);
+        if(j.placed && typeof j.slotIndex==='number' && j.slotIndex>=0){
+          slotsOccupied[j.slotIndex]=t.id; t.placed=true; t.slotIndex=j.slotIndex; t.el.dataset.placed='true';
+          const slot=document.querySelectorAll('.slot')[j.slotIndex];
+          if(slot){
+            slot.dataset.filled='true';
+            slot.textContent=`${t.name}${t.rank?' — '+t.rank:''}`;
+            const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×'; slot.appendChild(clear);
+            placeTileAtSlotIndex(t, j.slotIndex);
+          }
+        }
+      }
+      recomputeCompeting(); layoutTray();
+      metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols} · ${tiles.size} judges`;
+    }
+
+    /* recompute competing flags and bounce any now-blocked judges */
     function recomputeCompeting(){
-      const active = new Set(ringDivisionsNorm.filter(Boolean));
+      const active=new Set(ringDivisionsNorm.filter(Boolean));
       tiles.forEach(t=>{
-        const competing = t.divNorm && active.has(t.divNorm);
-        t.el.dataset.competing = competing ? 'true':'false';
-        t.competing = competing;
-        if(competing && t.placed){ removeFromSlot(t.slotIndex); returnToTray(t); }
+        const competing=t.divNorm && active.has(t.divNorm);
+        t.competing=competing; t.el.dataset.competing=competing?'true':'false';
+        if(competing && t.placed){
+          const idx=t.slotIndex; if(idx>=0){ slotsOccupied[idx]=null; resetSlotUI(idx); }
+          returnToTray(t);
+        }
       });
     }
 
-    function returnToTray(tile){
-      tile.placed=false; tile.slotIndex=-1; tile.el.style.opacity=''; layoutTray();
-    }
-
-    function onDropOnSlot(e, slot){
-      e.preventDefault();
-      const id = e.dataTransfer.getData('text/plain');
-      const tile = tiles.get(id); if(!tile) return;
-
-      const ringIdx = parseInt(slot.dataset.ring);
-      const slotIdx = parseInt(slot.dataset.slot);
-      const globalIdx = ringIdx*SLOTS_PER_RING + slotIdx;
-
-      // division block
-      const code = ringDivisionsNorm[ringIdx]||'';
-      if(tile.divNorm && code && tile.divNorm===code){ alert('Judges competing'); return; }
-
-      // rank eligibility
-      const cat = ringCategory[ringIdx] || 'Color';
-      if(!judgeEligibleFor(cat, tile.level)) { alert('Judge rank not eligible for this ring'); return; }
-
-      // fill slot (clear previous owner if any — but we disallow if already filled by another)
-      if(slotsOccupied[globalIdx] && slotsOccupied[globalIdx]!==id) return; // ignore
-
-      // release previous
-      if(tile.placed && tile.slotIndex!==-1){ removeFromSlot(tile.slotIndex); }
-
-      slotsOccupied[globalIdx] = id;
-      tile.placed = true; tile.slotIndex = globalIdx;
-      slot.dataset.filled='true';
-      // set text to tile name and badges visual
-      slot.childNodes.forEach(n=>{ if(n.nodeType===3) n.remove(); }); // remove text nodes
-      const label = document.createElement('div'); label.textContent = tile.name + (tile.rank?` — ${tile.rank}`:'');
-      label.style.pointerEvents='none';
-      slot.insertBefore(label, slot.firstChild);
-
-      updateRingFull(ringIdx);
-      layoutTray();
-    }
-
-    // ------------------ CONTROLS ------------------
-    document.getElementById('newBtn').addEventListener('click', ()=>{
-      const str = prompt('How many rings?','12');
-      if(str===null) return;
-      const n = Math.max(1, parseInt(str,10)||12);
-      rings = n; buildRings(n);
-    });
-
-    document.getElementById('addJudgeBtn').addEventListener('click', ()=>{
-      const name = (document.getElementById('jName').value||'').trim();
-      if(!name) return alert('Enter a judge name');
-      const rank = (document.getElementById('jRank').value||'').trim();
-      const div  = (document.getElementById('jDiv').value||'').trim();
-      addJudge(name, rank, div);
-      document.getElementById('jName').value=''; document.getElementById('jRank').value=''; document.getElementById('jDiv').value='';
-    });
-
-    // CSV import (name,rank,division)
-    document.getElementById('csvInput').addEventListener('change', (e)=>{
-      const file = e.target.files[0]; if(!file) return;
-      const reader = new FileReader();
-      reader.onload = ()=>{
-        const text = reader.result; const rows = text.split(/\r?\n/).filter(Boolean);
-        rows.forEach(line=>{ const [name, rank='', division=''] = line.split(',').map(s=>s?.trim()); if(name) addJudge(name, rank, division); });
-      };
-      reader.readAsText(file);
-      e.target.value='';
-    });
-
-    // ------------------ INIT SAMPLE ------------------
+    /* ---------- INIT SAMPLE ---------- */
     (function init(){
-      buildRings(rings);
-      // demo judges
-      [
-        ['Sr. Master Alex Kim','7th Dan','M451829'],
-        ['Jordan Lee','3rd Dan','F231517'],
-        ['Taylor Shaw','2nd Dan','M453049'],
-        ['Morgan Diaz','4th Dan','M451829'],
-        ['Sam Patel','1st Dan',''],
-        ['Jamie Cho','3rd Dan','F231517'],
-      ].forEach(j=>addJudge(...j));
-      updateMeta();
+      tNameEl.value='';
+      rings=12; cols=Math.min(4, Math.ceil(Math.sqrt(rings))); rows=Math.ceil(rings/cols); renderGrid(rows, cols, rings);
+      spawnJudge('Sr. Master Alex Kim','7th Dan','M451829','4/5 Degree');
+      spawnJudge('Jordan Lee','3rd Dan','F231517','2/3 Degree');
+      spawnJudge('Taylor Shaw','2nd Dan','M453049','1 Degree');
+      spawnJudge('Morgan Diaz','4th Dan','M451829','2/3 Degree');
+      spawnJudge('Sam Patel','1st Dan','','Color');
+      spawnJudge('Jamie Cho','3rd Dan','F231517','2/3 Degree');
+      metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols} · ${tiles.size} demo judges`;
+      layoutTray();
     })();
   </script>
 </body>

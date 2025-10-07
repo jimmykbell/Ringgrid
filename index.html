@@ -9,29 +9,49 @@
     --ring-w: 220px;
     --ring-h: 240px;
     --gap: 16px;
-    --sidebar-w: clamp(320px, 32vw, 420px); /* responsive so it never pushes off-screen */
     --bg:#0b1220; --ink:#e6ecff; --muted:#a6b3d1; --accent:#5b8cff; --ok:#5de0a8; --danger:#ef4444;
   }
   *{box-sizing:border-box}
   html,body{height:100%}
-  body{margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;color:var(--ink);background:var(--bg);display:grid;grid-template-rows:auto 1fr;gap:14px;padding:14px;overflow-x:hidden}
+  body{
+    margin:0;font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    color:var(--ink);background:var(--bg);
+    display:grid;grid-template-rows:auto 1fr;gap:14px;padding:14px;
+    overflow-x:hidden;
+  }
+
   header{display:grid;grid-template-columns:1fr auto auto auto auto;gap:10px;align-items:center}
   h1{font-size:18px;margin:0;font-weight:800}
-  .tname{display:flex;align-items:center;gap:8px}
-  .tname input{width:360px;max-width:100%;background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;font-weight:800}
+  .tname{display:flex;align-items:center;gap:8px;min-width:0}
+  .tname input{width:360px;max-width:100%;background:#0b1b3a;color:var(--ink);
+    border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;font-weight:800}
   button,label.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;background:#1b2848;color:var(--ink)}
   button.primary{background:var(--accent);color:#fff}
   input[type=file]{display:none}
   .meta{color:var(--muted);font-size:13px;margin-left:6px}
 
-  .stage{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,var(--sidebar-w));gap:14px;min-height:min(82vh,860px)}
-  /* LEFT */
+  /* 75/25 main layout */
+  .stage{
+    display:grid !important;
+    grid-template-columns: 3fr 1fr !important; /* ≈75% / 25% */
+    gap:14px;
+    min-height:min(82vh,860px);
+    width:100%;
+  }
+
+  /* LEFT: rings */
   .grid{position:relative;border-radius:12px;background:#0a132a;padding:12px;overflow:auto}
-  .grid-mesh{display:grid;gap:var(--gap);grid-auto-rows:var(--ring-h);grid-template-columns:repeat(4,minmax(0,var(--ring-w)))}
-  .ring{width:var(--ring-w);height:var(--ring-h);background:#0f1b39;border-radius:14px;padding:10px;display:grid;grid-template-rows:auto auto 1fr;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
+  .grid-mesh{
+    display:grid;gap:var(--gap);
+    grid-auto-rows:var(--ring-h);
+    grid-template-columns: repeat(3, minmax(0, var(--ring-w))); /* fixed to 3 columns */
+  }
+  .ring{width:var(--ring-w);height:var(--ring-h);background:#0f1b39;border-radius:14px;padding:10px;
+    display:grid;grid-template-rows:auto auto 1fr;border:1px solid rgba(255,255,255,.08);
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
   .ring-title{display:grid;grid-template-columns:auto;gap:6px;align-items:center}
   .ring-id{font-size:15px;font-weight:800;color:#cfe3ff}
-  .ring-meta{display:grid;grid-template-columns:1fr;gap:6px}
+  .ring-meta{display:grid;grid-template-columns:1fr;gap:6px;min-width:0}
   .ring-division,.ring-category{background:#0d1633;border:1px solid rgba(255,255,255,.06);color:var(--ink);border-radius:8px;padding:6px 8px;font-weight:700;min-width:0}
   .ring-category{font-weight:800}
   .slots{display:grid;grid-template-rows:repeat(3,1fr);gap:8px;margin-top:6px}
@@ -41,17 +61,31 @@
   .slot .clear{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;background:#1b2848;color:#fff;border:1px solid rgba(255,255,255,.15);font-size:14px;line-height:18px;display:none;cursor:pointer}
   .slot[data-filled=true] .clear{display:inline-grid;place-items:center}
 
-  /* RIGHT */
-  .tray{position:relative;background:#0d1a36;border-radius:12px;padding:12px;overflow:hidden;display:grid;grid-template-rows:auto auto auto 1fr;gap:10px;min-width:0}
-  .tray-header{display:flex;gap:8px;align-items:center;justify-content:space-between}
+  /* RIGHT: judges — responsive & no overhang */
+  .tray{
+    position:relative;background:#0d1a36;border-radius:12px;padding:12px;overflow:hidden;
+    display:grid;grid-template-rows:auto auto auto 1fr;gap:10px;min-width:0;
+  }
+  .tray-header{display:flex;gap:8px;align-items:center;justify-content:space-between;min-width:0}
   .tray-title{font-size:14px;color:var(--muted);font-weight:700}
-  .search{display:grid;grid-template-columns:1fr auto;gap:8px}
-  .search input{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700}
-  .add-form{display:grid;grid-template-columns:1fr 140px 160px 160px auto;gap:8px}
-  .add-form input,.add-form select{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700}
+  .search{display:grid;grid-template-columns:1fr auto;gap:8px;min-width:0}
+  .search input{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700;min-width:0}
+  .add-form{
+    display:grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); /* wraps instead of forcing width */
+    gap:8px;min-width:0;
+  }
+  .add-form input,.add-form select{
+    background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700;min-width:0
+  }
   .tray-scroll{position:relative;overflow-y:auto;overflow-x:hidden;border-radius:10px;background:#0b1b3a;padding:10px;min-height:0;scrollbar-gutter:stable both-edges;overscroll-behavior:contain}
   .tray-area{position:relative;min-height:100%;overflow:visible}
-  .tile{position:absolute;width:calc(100% - 20px);min-height:66px;border-radius:10px;cursor:grab;user-select:none;touch-action:none;background:linear-gradient(180deg,#b4c5ff,#7da7ff);box-shadow:0 8px 18px rgba(0,0,0,.35),inset 0 0 0 2px rgba(0,0,0,.08);display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:8px 10px;left:8px;box-sizing:border-box}
+  .tile{
+    position:absolute;width:calc(100% - 16px);min-height:66px;border-radius:10px;cursor:grab;user-select:none;touch-action:none;
+    background:linear-gradient(180deg,#b4c5ff,#7da7ff);
+    box-shadow:0 8px 18px rgba(0,0,0,.35),inset 0 0 0 2px rgba(0,0,0,.08);
+    display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:8px 10px;left:8px;box-sizing:border-box
+  }
   .tile:active{cursor:grabbing}
   .t-name{font-weight:900;color:#0b1024;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .t-rank{font-size:12px;font-weight:700;color:#0b1024;opacity:.85}
@@ -77,8 +111,10 @@
 </header>
 
 <div class="stage">
+  <!-- LEFT: Rings -->
   <div class="grid"><div class="grid-mesh" id="gridMesh"></div></div>
 
+  <!-- RIGHT: Judges -->
   <aside class="tray">
     <div class="tray-header"><div class="tray-title">Judges (drag →)</div></div>
     <div class="search"><input id="searchBox" type="text" placeholder="Search judges by name…"/><button id="clearSearch" class="btn">Clear</button></div>
@@ -96,14 +132,14 @@
   </aside>
 </div>
 
-<div class="hint">• Set a ring’s <b>Division Code</b> and <b>Ring Category</b>. Either change will auto-remove any now-ineligible judge from that ring. • Use the search box to filter the judge list. • Click the × on a filled slot to remove a judge back to the list.</div>
+<div class="hint">• Rings fixed to 3 columns. • Judges panel wraps inputs and cannot widen the page. • Click × on a filled slot to remove the judge.</div>
 
 <script>
 /* -------------------- STATE -------------------- */
 let rows=0, cols=0, rings=0;
 const SLOTS_PER_RING=3;
-let slotsOccupied=[];       // global slot idx -> tileId|null
-let tiles=new Map();        // id -> tile state
+let slotsOccupied=[];      // global slot idx -> tileId|null
+let tiles=new Map();       // id -> tile state
 let idCounter=1;
 
 const meshEl=document.getElementById('gridMesh');
@@ -126,13 +162,8 @@ const loadBtn=document.getElementById('loadBtn');
 let ringDivisions=[];
 let ringDivisionsNorm=[];
 let ringCategories=[];
+
 /* -------------------- RANK RULES -------------------- */
-/* Exact rules you gave:
-   - 1st Degree can judge Tiger & Color
-   - 2/3 Degree can judge 1 Degree & 2/3 Degree
-   - 4/5 Degree can judge Tiger, Color, 1 Degree, 2/3 Degree, 4/5 Degree
-   - 6+ Degree can judge all
-*/
 function levelFromEligibility(sel){
   switch((sel||'').toLowerCase()){
     case 'tiger': return 0;
@@ -159,7 +190,7 @@ function normalizeDivision(s){ return (s||'').toString().trim().replace(/\s+/g,'
 function newLayout(){
   const rStr=prompt('How many rings?','12'); if(rStr===null) return;
   rings=Math.max(1, parseInt(rStr,10)||0);
-  cols=Math.min(4, Math.ceil(Math.sqrt(rings)));
+  cols=Math.min(3, Math.ceil(Math.sqrt(rings)));   // fixed to 3 columns max
   rows=Math.ceil(rings/cols);
   renderGrid(rows, cols, rings);
   metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols}`;
@@ -169,9 +200,11 @@ function renderGrid(r,c,total){
   ringDivisions=new Array(total).fill('');
   ringDivisionsNorm=new Array(total).fill('');
   ringCategories=new Array(total).fill('Color');
+
   for(let i=0;i<total;i++){
     const ringIdx=i;
     const ring=document.createElement('div'); ring.className='ring';
+
     const title=document.createElement('div'); title.className='ring-title';
     const idBadge=document.createElement('div'); idBadge.className='ring-id'; idBadge.textContent=`Ring ${ringIdx+1}`;
     title.appendChild(idBadge);
@@ -205,7 +238,9 @@ function onDivisionChange(ringIdx, code){
   for(let s=0;s<SLOTS_PER_RING;s++){
     const idx=ringIdx*SLOTS_PER_RING+s; const id=slotsOccupied[idx]; if(!id) continue;
     const t=tiles.get(id); if(!t) continue;
-    if(t.divNorm && ringDivisionsNorm[ringIdx] && t.divNorm===ringDivisionsNorm[ringIdx]){ slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t); }
+    if(t.divNorm && ringDivisionsNorm[ringIdx] && t.divNorm===ringDivisionsNorm[ringIdx]){
+      slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t);
+    }
   }
   recomputeCompeting();
   updateRingFull(ringIdx); layoutTray();
@@ -216,7 +251,9 @@ function onCategoryChange(ringIdx, cat){
   for(let s=0;s<SLOTS_PER_RING;s++){
     const idx=ringIdx*SLOTS_PER_RING+s; const id=slotsOccupied[idx]; if(!id) continue;
     const t=tiles.get(id); if(!t) continue;
-    if(!judgeEligibleFor(cat, t.level)){ slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t); }
+    if(!judgeEligibleFor(cat, t.level)){
+      slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t);
+    }
   }
   updateRingFull(ringIdx); layoutTray();
 }
@@ -237,7 +274,7 @@ function layoutTray(){
   const parent=trayArea.parentElement; // .tray-scroll
   const styles=getComputedStyle(parent);
   const pLeft=parseFloat(styles.paddingLeft)||0; const pRight=parseFloat(styles.paddingRight)||0;
-  const usableW=Math.max(0, parent.clientWidth - pLeft - pRight - 20); /* tighter so tiles never overhang */
+  const usableW=Math.max(0, parent.clientWidth - pLeft - pRight - 16); /* tight fit; no overhang */
   const leftPad=pLeft+8;
   tiles.forEach(t=>{
     if(t.placed) return;
@@ -271,12 +308,15 @@ function slotIsFilled(slot){ const idx=slotIndexFromDataset(slot); return !!slot
 function trySnapToNearestSlot(tile, clientX, clientY){
   const slot=findBestSlot(clientX, clientY); if(!slot) return false;
   const idx=slotIndexFromDataset(slot), ringIdx=parseInt(slot.dataset.ring,10);
+
   // division guard
   const code=ringDivisionsNorm[ringIdx]||'';
   if(tile.divNorm && code && tile.divNorm===code){ alert('Judges competing'); return false; }
-  // rank guard (your rules)
+
+  // rank guard
   const cat=ringCategories[ringIdx] || 'Color';
   if(!judgeEligibleFor(cat, tile.level)){ alert('Judge rank not eligible for this ring'); return false; }
+
   if(slotsOccupied[idx] && slotsOccupied[idx]!==tile.id) return false;
 
   // release previous
@@ -307,7 +347,7 @@ function findBestSlot(x,y){
 }
 function bounceBack(tile){ if(tile.placed && tile.slotIndex!==-1) return; tile.el.style.left=tile.startLeft+'px'; tile.el.style.top=tile.startTop+'px'; tile.el.dataset.placed='false'; }
 
-/* one global listener for all future × buttons */
+/* global × handler for slots */
 meshEl.addEventListener('click', (e)=>{
   const btn=e.target.closest('.clear'); if(!btn) return;
   const slot=btn.closest('.slot'); const idx=slotIndexFromDataset(slot); const id=slotsOccupied[idx]; if(!id) return;
@@ -353,17 +393,21 @@ clearSearchBtn.addEventListener('click', ()=>{ searchBox.value=''; layoutTray();
 
 document.getElementById('newBtn').addEventListener('click', (e)=>{ e.preventDefault(); newLayout(); });
 
-const saveBtnEl=document.getElementById('saveBtn'), loadBtnEl=document.getElementById('loadBtn');
-saveBtnEl.addEventListener('click', ()=>{
-  const name=(tNameEl.value||'').trim(); if(!name) return alert('Enter a tournament name first.');
-  const data=snapshotState(name); const key=`tournaments.${name}`; localStorage.setItem(key, JSON.stringify(data));
-  const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]'); if(!idx.includes(name)){ idx.push(name); localStorage.setItem('tournaments.index', JSON.stringify(idx)); }
+saveBtn.addEventListener('click', ()=>{
+  const name=(tNameEl.value||'').trim(); if(!name){ alert('Enter a tournament name first.'); return; }
+  const data=snapshotState(name);
+  const key=`tournaments.${name}`;
+  localStorage.setItem(key, JSON.stringify(data));
+  const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]');
+  if(!idx.includes(name)){ idx.push(name); localStorage.setItem('tournaments.index', JSON.stringify(idx)); }
   alert('Tournament saved.');
 });
-loadBtnEl.addEventListener('click', ()=>{
-  const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]'); if(!idx.length) return alert('No saved tournaments yet.');
+loadBtn.addEventListener('click', ()=>{
+  const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]');
+  if(!idx.length){ alert('No saved tournaments yet.'); return; }
   const name=prompt(`Load which tournament?\n${idx.join(', ')}`); if(!name) return;
-  const data=JSON.parse(localStorage.getItem(`tournaments.${name}`)||'null'); if(!data) return alert('Not found.');
+  const data=JSON.parse(localStorage.getItem(`tournaments.${name}`)||'null');
+  if(!data){ alert('Not found.'); return; }
   restoreState(data); alert(`Loaded: ${name}`);
 });
 
@@ -379,7 +423,7 @@ function placeTileAtSlotIndex(tile, idx){
 }
 function clearTiles(){ tiles.forEach(t=>t.el.remove()); tiles.clear(); trayArea.innerHTML=''; }
 function restoreState(data){
-  tNameEl.value=data.name||''; rings=data.rings; rows=data.rows; cols=Math.min(4, data.cols || Math.ceil(Math.sqrt(rings)));
+  tNameEl.value=data.name||''; rings=data.rings; rows=data.rows; cols=Math.min(3, data.cols || Math.ceil(Math.sqrt(rings)));
   renderGrid(rows, cols, rings);
   ringDivisions=data.ringDivisions || new Array(rings).fill(''); ringDivisionsNorm=ringDivisions.map(normalizeDivision);
   ringCategories=data.ringCategories || new Array(rings).fill('Color');
@@ -410,7 +454,7 @@ function recomputeCompeting(){
 
 /* -------------------- INIT DEMO -------------------- */
 (function init(){
-  rings=12; cols=Math.min(4, Math.ceil(Math.sqrt(rings))); rows=Math.ceil(rings/cols); renderGrid(rows, cols, rings);
+  rings=12; cols=Math.min(3, Math.ceil(Math.sqrt(rings))); rows=Math.ceil(rings/cols); renderGrid(rows, cols, rings);
   spawnJudge('Sr. Master Alex Kim','7th Dan','M451829','6+ Degree');
   spawnJudge('Jordan Lee','3rd Dan','F231517','2/3 Degree');
   spawnJudge('Taylor Shaw','2nd Dan','M453049','1 Degree');

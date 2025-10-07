@@ -18,16 +18,15 @@
   h1{font-size:18px;margin:0;font-weight:800}
   .tname{display:flex;align-items:center;gap:8px}
   .tname input{width:360px;max-width:100%;background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;font-weight:800}
-
   button,label.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;background:#1b2848;color:var(--ink)}
   button.primary{background:var(--accent);color:#fff}
   input[type=file]{display:none}
   .meta{color:var(--muted);font-size:13px;margin-left:6px}
 
-  /* Stage: 75% rings / 25% judges */
+  /* Layout: 75% / 25% */
   .stage{display:grid;grid-template-columns:3fr 1fr;gap:14px;min-height:min(82vh,860px)}
 
-  /* LEFT (rings) */
+  /* LEFT: grid */
   .grid{position:relative;border-radius:12px;background:#0a132a;padding:12px;overflow:auto}
   .grid-mesh{display:grid;gap:var(--gap);grid-auto-rows:var(--ring-h);grid-template-columns:repeat(3,minmax(0,var(--ring-w)))}
   .ring{width:var(--ring-w);height:var(--ring-h);background:#0f1b39;border-radius:14px;padding:10px;display:grid;grid-template-rows:auto auto 1fr;border:1px solid rgba(255,255,255,.08);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
@@ -35,6 +34,7 @@
   .ring-id{font-size:15px;font-weight:800;color:#cfe3ff}
   .ring-meta{display:grid;grid-template-columns:1fr;gap:6px}
   .ring-division,.ring-category{background:#0d1633;border:1px solid rgba(255,255,255,.06);color:var(--ink);border-radius:8px;padding:6px 8px;font-weight:700;min-width:0}
+  .ring-category{font-weight:800}
   .slots{display:grid;grid-template-rows:repeat(3,1fr);gap:8px;margin-top:6px}
   .slot{position:relative;border-radius:10px;background:rgba(255,255,255,.05);border:1px dashed rgba(255,255,255,.18);display:grid;place-items:center;color:var(--muted);font-size:12px;text-align:center;padding:6px}
   .slot[data-active=true]{outline:2px solid var(--accent);outline-offset:-2px}
@@ -42,18 +42,16 @@
   .slot .clear{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:6px;background:#1b2848;color:#fff;border:1px solid rgba(255,255,255,.15);font-size:14px;line-height:18px;display:none;cursor:pointer}
   .slot[data-filled=true] .clear{display:inline-grid;place-items:center}
 
-  /* RIGHT (judges) */
+  /* RIGHT: judges */
   aside.tray{position:relative;background:#0d1a36;border-radius:12px;padding:12px;overflow:hidden;display:grid;grid-template-rows:auto auto auto 1fr;gap:10px;min-width:0}
   .tray-header{display:flex;gap:8px;align-items:center;justify-content:space-between}
   .tray-title{font-size:14px;color:var(--muted);font-weight:700}
-  .search{display:grid;grid-template-columns:1fr auto auto;gap:8px}
+  .search{display:grid;grid-template-columns:1fr auto;gap:8px}
   .search input{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700}
-  .rank-filter{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700}
-  .add-form{display:grid;grid-template-columns:1fr 120px 160px auto;gap:8px}
+  .add-form{display:grid;grid-template-columns:1fr 90px 160px auto;gap:8px}
   .add-form input,.add-form select{background:#0b1b3a;color:var(--ink);border:1px solid rgba(255,255,255,.12);border-radius:8px;padding:8px;font-weight:700}
-  .tray-scroll{position:relative;overflow-y:auto;overflow-x:hidden;border-radius:10px;background:#0b1b3a;padding:10px;min-height:0;scrollbar-gutter:stable both-edges;overscroll-behavior:contain}
+  .tray-scroll{position:relative;overflow-y:auto;overflow-x:hidden;border-radius:10px;background:#0b1b3a;padding:10px;min-height:0;scrollbar-gutter:stable both-edges}
   .tray-area{position:relative;min-height:100%;overflow:visible}
-
   .tile{position:absolute;width:calc(100% - 20px);min-height:66px;border-radius:10px;cursor:grab;user-select:none;touch-action:none;background:linear-gradient(180deg,#b4c5ff,#7da7ff);box-shadow:0 8px 18px rgba(0,0,0,.35),inset 0 0 0 2px rgba(0,0,0,.08);display:grid;grid-template-columns:1fr auto;gap:6px;align-items:center;padding:8px 10px;left:8px;box-sizing:border-box}
   .tile:active{cursor:grabbing}
   .t-name{font-weight:900;color:#0b1024;line-height:1.1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -70,43 +68,28 @@
 <header>
   <div class="tname">
     <h1>Judge Assignment — Firebase Live</h1>
-    <input id="tournamentName" placeholder="Select tournament…"/>
+    <input id="tournamentName" placeholder="Tournament name…"/>
   </div>
-  <button id="createBtn" class="btn">Create</button>
   <button id="newBtn" type="button" class="primary">New Rings</button>
   <button id="addJudgeBtn" type="button" class="btn">Add Judge</button>
   <label class="btn" for="csvInput">Import Judges (CSV)</label><input id="csvInput" type="file" accept=".csv"/>
-  <div style="display:flex;gap:8px;">
-    <button id="saveBtn" type="button" class="btn">Save</button>
-    <button id="loadBtn" type="button" class="btn">Load</button>
-  </div>
+  <div style="display:flex;gap:8px;"><button id="saveBtn" type="button" class="btn">Save</button><button id="loadBtn" type="button" class="btn">Load</button></div>
   <span class="meta" id="meta"></span>
 </header>
 
 <div class="stage">
-  <!-- LEFT: RINGS -->
   <div class="grid"><div class="grid-mesh" id="gridMesh"></div></div>
 
-  <!-- RIGHT: JUDGES -->
   <aside class="tray">
     <div class="tray-header"><div class="tray-title">Judges (drag →)</div></div>
     <div class="search">
       <input id="searchBox" type="text" placeholder="Search judges by name…"/>
-      <button id="clearSearch" class="btn">Clear</button>
-      <select id="rankFilter" class="rank-filter">
-        <option value="">All judges</option>
-        <option value="6">Masters (6+)</option>
-        <option value="5">5th degree</option>
-        <option value="4">4th degree</option>
-        <option value="3">3rd degree</option>
-        <option value="2">2nd degree</option>
-        <option value="1">1st degree</option>
-      </select>
+      <button id="clearSearch" class="btn" type="button">Clear</button>
     </div>
     <form class="add-form" id="addForm">
-      <input id="addName" type="text" placeholder="Judge name (include title if any)" required/>
-      <select id="addRank" aria-label="Rank (1–8)">
-        <option value="">Rank…</option>
+      <input id="addName" type="text" placeholder="Judge name" required/>
+      <select id="addRank" title="Rank 1–8">
+        <option value="">Rank</option>
         <option>1</option><option>2</option><option>3</option><option>4</option>
         <option>5</option><option>6</option><option>7</option><option>8</option>
       </select>
@@ -117,16 +100,14 @@
   </aside>
 </div>
 
-<div class="hint">
-  • Pick a tournament (or create one) to sync live via Firebase. • New Rings clears placements. • Rank filter + auto-sort are in the right panel. • Rank is eligibility (1–8). • CSV can be: (name, rank, division) or (name, division, rank).
-</div>
+<div class="hint">• Pick/load a tournament name to sync live via Firebase. • New Rings clears placements & judges. • Rank is numeric (1–8) and defines eligibility. • Search filters by name.</div>
 
 <script>
-/* -------------------- STATE -------------------- */
-const SLOTS_PER_RING=3;
+/* ---------------- STATE ---------------- */
 let rows=0, cols=0, rings=0;
-let slotsOccupied=[];                  // global slot index -> tileId|null
-let tiles=new Map();                   // id -> tile state
+const SLOTS_PER_RING=3;
+let slotsOccupied=[];
+let tiles=new Map();
 let idCounter=1;
 
 const meshEl=document.getElementById('gridMesh');
@@ -135,184 +116,179 @@ const metaEl=document.getElementById('meta');
 const csvInput=document.getElementById('csvInput');
 const addForm=document.getElementById('addForm');
 const addName=document.getElementById('addName');
-const addRank=document.getElementById('addRank');
+const addRank=document.getElementById('addRank');     // numeric 1..8
 const addDivision=document.getElementById('addDivision');
 const searchBox=document.getElementById('searchBox');
 const clearSearchBtn=document.getElementById('clearSearch');
-const rankFilter=document.getElementById('rankFilter');
 const addJudgeBtn=document.getElementById('addJudgeBtn');
 const tNameEl=document.getElementById('tournamentName');
 
 /* per-ring data */
-let ringDivisions=[], ringDivisionsNorm=[], ringCategories=[];
-/* -------------------- RULES -------------------- */
-/* Rank (1–8) acts as eligibility:
-   1 → can judge Tiger, Color, 1 Degree
-   2/3 → can judge 1 & 2/3
-   4/5 → can judge 1, 2/3, 4/5
-   6+  → can judge all
+let ringDivisions=[];      // raw entered
+let ringDivisionsNorm=[];  // normalized
+let ringCategories=[];     // 'Tiger','Color','1 Degree','2/3 Degree','4/5 Degree','6+ Degree'
+let ringMinRank=[];        // numeric requirement 1..8 minimal rank that can judge
+
+/* ------------- Helpers ------------- */
+function normalizeDivision(s){ return (s||'').toString().trim().replace(/\s+/g,'').toUpperCase(); }
+
+/* Category -> minimal rank allowed (your logic w/ rank=eligibility)
+   1: Tiger/Color/1°
+   2–3: + 2/3°
+   4–5: + 4/5°
+   6–8: all
 */
-function minRankForCategory(cat){
+function catToMinRank(cat){
   switch((cat||'').toLowerCase()){
     case 'tiger': return 1;
     case 'color': return 1;
     case '1 degree': return 1;
     case '2/3 degree': return 2;
     case '4/5 degree': return 4;
-    default: return 6; // if somehow set to 6+, require master
+    case '6+ degree': return 6;
+    default: return 1;
   }
 }
-function judgeEligible(rankNum, cat){
-  rankNum = parseRank(rankNum);
-  const min = minRankForCategory(cat);
-  if (rankNum >= 6) return true;           // masters can judge all
-  if (min <= 1) return rankNum >= 1;       // Tiger/Color/1°
-  if (min <= 2) return rankNum >= 2;       // 2/3°
-  if (min <= 4) return rankNum >= 4;       // 4/5°
-  return rankNum >= 6;
+function judgeEligibleFor(cat, rank){
+  const min=catToMinRank(cat);
+  return (parseInt(rank||0,10) >= min);
 }
+
 function parseRank(val){
   if (typeof val === 'number') return Math.max(1, Math.min(8, Math.floor(val)));
   const s=String(val||'').trim();
-  const m=s.match(/^\s*([1-8])\s*$/);
-  return m ? Math.max(1, Math.min(8, parseInt(m[1],10))) : 6; // default to 6 so they aren't blocked
+  if (/^[1-8]$/.test(s)) return parseInt(s,10);
+  return 6; // safe default (senior)
 }
-function normalizeDivision(s){ return (s||'').toString().trim().replace(/\s+/g,'').toUpperCase(); }
 
-/* -------------------- UI BUILD -------------------- */
+/* ------------- UI build ------------- */
 function newLayout(){
-  const rStr=prompt('How many rings?', String(rings||12)); if(rStr===null) return;
+  const rStr=prompt('How many rings?', String(rings||12));
+  if (rStr===null) return;
   const n=Math.max(1, parseInt(rStr,10)||0);
 
-  // wipe judges/placements
-  clearTiles(); tiles=new Map(); idCounter=1;
+  // clear judges & placements
+  clearTiles();
+  tiles=new Map(); idCounter=1;
 
   rings=n;
   cols=Math.min(3, Math.ceil(Math.sqrt(rings)));
   rows=Math.ceil(rings/cols);
-
   renderGrid(rows, cols, rings);
   slotsOccupied=new Array(rings*SLOTS_PER_RING).fill(null);
   ringDivisions=new Array(rings).fill('');
   ringDivisionsNorm=new Array(rings).fill('');
   ringCategories=new Array(rings).fill('Color');
+  ringMinRank=new Array(rings).fill(catToMinRank('Color'));
 
   metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols}`;
   layoutTray();
   if (window.queueSaveFirebase) window.queueSaveFirebase();
 }
-// bind once
 (function bindNewRings(){
-  const btn=document.getElementById('newBtn'); if(!btn) return;
-  btn.type='button'; btn.onclick=(e)=>{ e.preventDefault(); newLayout(); };
+  const btn=document.getElementById('newBtn');
+  if (!btn) return;
+  btn.onclick=(e)=>{e.preventDefault(); newLayout();};
 })();
 
 function renderGrid(r,c,total){
   meshEl.innerHTML='';
-  ringDivisions=new Array(total).fill('');
-  ringDivisionsNorm=new Array(total).fill('');
-  ringCategories=new Array(total).fill('Color');
-
   for(let i=0;i<total;i++){
+    const ringIdx=i;
     const ring=document.createElement('div'); ring.className='ring';
-
     const title=document.createElement('div'); title.className='ring-title';
-    const idBadge=document.createElement('div'); idBadge.className='ring-id'; idBadge.textContent=`Ring ${i+1}`;
+    const idBadge=document.createElement('div'); idBadge.className='ring-id'; idBadge.textContent=`Ring ${ringIdx+1}`;
     title.appendChild(idBadge);
 
     const meta=document.createElement('div'); meta.className='ring-meta';
     const divInput=document.createElement('input'); divInput.className='ring-division'; divInput.placeholder='Division code (e.g., M451829)';
-    divInput.addEventListener('input', ()=> onDivisionChange(i, divInput.value));
+    divInput.addEventListener('input', ()=> onDivisionChange(ringIdx, divInput.value));
     meta.appendChild(divInput);
 
     const cat=document.createElement('select'); cat.className='ring-category';
-    ['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree'].forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;cat.appendChild(o);});
+    ['Tiger','Color','1 Degree','2/3 Degree','4/5 Degree','6+ Degree'].forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;cat.appendChild(o);});
     cat.value='Color';
-    cat.addEventListener('change', ()=> onCategoryChange(i, cat.value));
+    cat.addEventListener('change', ()=> onCategoryChange(ringIdx, cat.value));
     meta.appendChild(cat);
 
     const slots=document.createElement('div'); slots.className='slots';
     for(let s=0;s<SLOTS_PER_RING;s++){
-      const slot=document.createElement('div'); slot.className='slot'; slot.dataset.ring=i; slot.dataset.slot=s; slot.textContent=`Judge slot ${s+1}`;
-      const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×'; slot.appendChild(clear);
-      slots.appendChild(slot);
+      const slot=document.createElement('div'); slot.className='slot'; slot.dataset.ring=ringIdx; slot.dataset.slot=s; slot.textContent=`Judge slot ${s+1}`;
+      const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×';
+      slot.appendChild(clear); slots.appendChild(slot);
     }
-
     ring.append(title, meta, slots); meshEl.appendChild(ring);
   }
-  slotsOccupied=new Array(total*SLOTS_PER_RING).fill(null);
 }
 
-/* -------------------- RING EVENTS -------------------- */
+/* ------------- ring events ------------- */
 function onDivisionChange(ringIdx, code){
-  ringDivisions[ringIdx]=code; ringDivisionsNorm[ringIdx]=normalizeDivision(code);
-  // pop any judges with that division from this ring
+  ringDivisions[ringIdx]=code;
+  ringDivisionsNorm[ringIdx]=normalizeDivision(code);
+  // pop any now-competing judge
   for(let s=0;s<SLOTS_PER_RING;s++){
-    const idx=ringIdx*SLOTS_PER_RING+s; const id=slotsOccupied[idx]; if(!id) continue;
-    const t=tiles.get(id); if(!t) continue;
-    if(t.divNorm && ringDivisionsNorm[ringIdx] && t.divNorm===ringDivisionsNorm[ringIdx]){
+    const idx=ringIdx*SLOTS_PER_RING+s;
+    const id=slotsOccupied[idx]; if(!id) continue;
+    const t=tiles.get(id);
+    if(t && t.divNorm && ringDivisionsNorm[ringIdx] && t.divNorm===ringDivisionsNorm[ringIdx]){
       slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t);
     }
   }
   recomputeCompeting();
+  updateRingFull(ringIdx);
   layoutTray();
   if (window.queueSaveFirebase) window.queueSaveFirebase();
 }
 function onCategoryChange(ringIdx, cat){
-  // auto-remove any now-ineligible judges already in this ring
+  ringCategories[ringIdx]=cat;
+  ringMinRank[ringIdx]=catToMinRank(cat);
+  // pop ineligible
   for(let s=0;s<SLOTS_PER_RING;s++){
     const idx=ringIdx*SLOTS_PER_RING+s; const id=slotsOccupied[idx]; if(!id) continue;
     const t=tiles.get(id); if(!t) continue;
-    if(!judgeEligible(t.rankNum, cat)){ slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t); }
+    if(!judgeEligibleFor(cat, t.rankNum)){ slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t); }
   }
+  updateRingFull(ringIdx);
   layoutTray();
   if (window.queueSaveFirebase) window.queueSaveFirebase();
 }
 
-/* -------------------- JUDGES -------------------- */
+/* ------------- judges ------------- */
 function spawnJudge(name, rankNum, division){
   const id=`J${idCounter++}`;
   const el=document.createElement('div'); el.className='tile'; el.dataset.id=id; trayArea.appendChild(el);
-
-  const divText=(division||'').trim();
-  const state={ id, name, rankNum:parseRank(rankNum), division:divText, divNorm:normalizeDivision(divText), competing:false, el, placed:false, slotIndex:-1, startLeft:10, startTop:10 };
+  const state={ id, name, rankNum:parseRank(rankNum), division:(division||'').trim(), divNorm:normalizeDivision(division), competing:false, el, placed:false, slotIndex:-1, startLeft:10, startTop:10 };
   tiles.set(id,state);
-
-  el.innerHTML=`<div><div class="t-name">${name||'Unnamed'}</div><div class="t-rank">${state.rankNum} Dan</div></div><div class="t-id">${divText?`<span class='t-badge'>${divText}</span>`:''}<span class='t-badge'>Rank ${state.rankNum}</span></div>`;
-
+  el.innerHTML=`<div><div class="t-name">${name||'Unnamed'}</div><div class="t-rank">Rank ${state.rankNum||'?'}</div></div><div class="t-id">${state.division?`<span class='t-badge'>${state.division}</span>`:''}</div>`;
   enableDrag(state);
   recomputeCompeting();
   layoutTray();
 }
+
 function returnToTray(tile){ tile.placed=false; tile.slotIndex=-1; tile.el.dataset.placed='false'; }
 function layoutTray(){
   const q=(searchBox.value||'').trim().toLowerCase();
-  const rf=rankFilter.value.trim();
   let y=10;
-  const parent=trayArea.parentElement;
+  const parent=trayArea.parentElement; // .tray-scroll
   const styles=getComputedStyle(parent);
-  const pLeft=parseFloat(styles.paddingLeft)||0, pRight=parseFloat(styles.paddingRight)||0;
-  const usableW=Math.max(0, parent.clientWidth - pLeft - pRight - 20);
-  const leftPad=pLeft+8;
-  // sort: higher rank first
-  const list=[...tiles.values()].filter(t=>!t.placed);
-  list.sort((a,b)=>b.rankNum-a.rankNum || a.name.localeCompare(b.name));
-  list.forEach(t=>{
-    const matchName=!q || (t.name && t.name.toLowerCase().includes(q));
-    const matchRank=!rf || (rf==='6' ? t.rankNum>=6 : t.rankNum===parseInt(rf,10));
-    const show = matchName && matchRank && !t.competing;
-    t.el.style.display = show ? 'grid' : 'none';
+  const pL=parseFloat(styles.paddingLeft)||0, pR=parseFloat(styles.paddingRight)||0;
+  const usableW=Math.max(0, parent.clientWidth - pL - pR - 20);
+  const leftPad=pL+8;
+  tiles.forEach(t=>{
+    if(t.placed) return;
+    const show=!q || (t.name && t.name.toLowerCase().includes(q));
+    t.el.style.display=show?'grid':'none';
     if(show){
       t.el.style.width=usableW+'px';
       t.el.style.left=leftPad+'px';
       t.el.style.top=y+'px';
       t.startLeft=10; t.startTop=y;
-      y += (t.el.offsetHeight||66)+10;
+      y+=(t.el.offsetHeight||66)+10;
     }
   });
 }
 
-/* -------------------- DRAG/DROP -------------------- */
+/* ------------- drag/drop ------------- */
 function enableDrag(tile){
   let startX=0,startY=0,originLeft=0,originTop=0,dragging=false;
   const onDown=(e)=>{ e.preventDefault(); tile.el.setPointerCapture(e.pointerId); dragging=true; startX=e.clientX; startY=e.clientY; const r=tile.el.getBoundingClientRect(), p=tile.el.offsetParent.getBoundingClientRect(); originLeft=r.left-p.left; originTop=r.top-p.top; tile.el.style.transition='none'; tile.el.style.zIndex=1000; };
@@ -328,223 +304,12 @@ function slotIndexFromDataset(slot){ const ring=parseInt(slot.dataset.ring,10); 
 function slotIsFilled(slot){ const idx=slotIndexFromDataset(slot); return !!slotsOccupied[idx]; }
 
 function trySnapToNearestSlot(tile, clientX, clientY){
-  const slot=findBestSlot(clientX,clientY); if(!slot) return false;
+  const slot=findBestSlot(clientX, clientY); if(!slot) return false;
   const idx=slotIndexFromDataset(slot), ringIdx=parseInt(slot.dataset.ring,10);
 
+  // division guard
   const code=ringDivisionsNorm[ringIdx]||'';
   if(tile.divNorm && code && tile.divNorm===code){ alert('Judges competing'); return false; }
-
-  const cat=(ringCategories[ringIdx]||'Color');
-  if(!judgeEligible(tile.rankNum, cat)){ alert('Judge rank not eligible for this ring'); return false; }
-
-  if(slotsOccupied[idx] && slotsOccupied[idx]!==tile.id) return false;
-
-  // release previous
-  if(tile.placed && tile.slotIndex!==-1){ resetSlotUI(tile.slotIndex); slotsOccupied[tile.slotIndex]=null; }
-
-  const sr=slot.getBoundingClientRect(), pr=tile.el.offsetParent.getBoundingClientRect();
-  tile.el.style.left = (sr.left-pr.left + (sr.width - tile.el.offsetWidth)/2) + 'px';
-  tile.el.style.top  = (sr.top -pr.top  + (sr.height- tile.el.offsetHeight)/2) + 'px';
-
-  slotsOccupied[idx]=tile.id; tile.placed=true; tile.slotIndex=idx; tile.el.dataset.placed='true';
-  slot.dataset.filled='true'; slot.textContent = `${tile.name} — ${tile.rankNum} Dan`;
-  const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×'; slot.appendChild(clear);
-
-  layoutTray();
-  if (window.queueSaveFirebase) window.queueSaveFirebase();
-  return true;
-}
-function findBestSlot(x,y){
-  const el=document.elementFromPoint(x,y);
-  let cand=el && el.classList && el.classList.contains('slot') ? el : null;
-  if(cand && !slotIsFilled(cand)) return cand;
-  let best=null,bestD=Infinity;
-  for(const s of document.querySelectorAll('.slot')){
-    if(slotIsFilled(s)) continue;
-    const r=s.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
-    const dx=cx-x, dy=cy-y, d=dx*dx+dy*dy; if(d<bestD){ bestD=d; best=s; }
-  }
-  return best;
-}
-function bounceBack(tile){ if(tile.placed && tile.slotIndex!==-1) return; tile.el.style.left=tile.startLeft+'px'; tile.el.style.top=tile.startTop+'px'; tile.el.dataset.placed='false'; }
-
-/* remove (×) via delegation */
-meshEl.addEventListener('click', (e)=>{
-  const btn=e.target.closest('.clear'); if(!btn) return;
-  const slot=btn.closest('.slot'); const idx=slotIndexFromDataset(slot); const id=slotsOccupied[idx]; if(!id) return;
-  const tile=tiles.get(id); slotsOccupied[idx]=null; resetSlotUI(idx); if(tile) returnToTray(tile); layoutTray();
-  if (window.queueSaveFirebase) window.queueSaveFirebase();
-});
-
-/* -------------------- UTIL -------------------- */
-function resetSlotUI(globalIdx){
-  const slot=document.querySelectorAll('.slot')[globalIdx]; if(!slot) return;
-  const slotNum=(globalIdx%SLOTS_PER_RING)+1;
-  slot.dataset.filled='false';
-  slot.textContent=`Judge slot ${slotNum}`;
-  const again=document.createElement('button'); again.className='clear'; again.type='button'; again.title='Remove judge'; again.textContent='×'; slot.appendChild(again);
-}
-function recomputeCompeting(){
-  const active=new Set(ringDivisionsNorm.filter(Boolean));
-  tiles.forEach(t=>{
-    const competing=t.divNorm && active.has(t.divNorm);
-    t.competing=competing; t.el.dataset.competing=competing?'true':'false';
-    if(competing && t.placed){ const idx=t.slotIndex; if(idx>=0){ slotsOccupied[idx]=null; resetSlotUI(idx); } returnToTray(t); }
-  });
-}
-
-/* -------------------- CSV / ADD / FILTER -------------------- */
-csvInput.addEventListener('change', async (e)=>{
-  const file=e.target.files[0]; if(!file) return;
-  const text=await file.text();
-  const rows=parseCSV(text);
-  for(const r of rows){
-    if(!r.length) continue;
-    const name=(r[0]||'').trim();
-    if(!name || /^name$/i.test(name)) continue;
-
-    // auto-detect columns 2 & 3
-    let c1=(r[1]||'').trim(), c2=(r[2]||'').trim();
-    let rankTok='', divTok='';
-    if (isRankToken(c1) && isDivisionToken(c2)) { rankTok=c1; divTok=c2; }
-    else if (isDivisionToken(c1) && isRankToken(c2)) { divTok=c1; rankTok=c2; }
-    else { // fallback
-      rankTok = isRankToken(c1) ? c1 : (isRankToken(c2)?c2:'');
-      divTok  = isDivisionToken(c1) ? c1 : (isDivisionToken(c2)?c2:'');
-    }
-    const rankNum=parseRank(rankTok);
-    spawnJudge(name, rankNum, divTok);
-  }
-  metaEl.textContent=`${tiles.size} judges loaded.`;
-  csvInput.value='';
-  if (window.queueSaveFirebase) window.queueSaveFirebase();
-});
-function isRankToken(s){ return /^[1-8]$/.test(String(s||'').trim()); }
-function isDivisionToken(s){ return /[A-Za-z]/.test(String(s||'').trim()); }
-function parseCSV(text){
-  const lines=text.split(/\r?\n/).filter(l=>l.trim().length);
-  const rows=[]; for(let i=0;i<lines.length;i++){ const line=lines[i]; if(i===0 && /^\s*name\s*,/i.test(line)) continue; rows.push(parseCSVLine(line)); } return rows;
-}
-function parseCSVLine(line){ const out=[]; let cur=''; let q=false; for(let i=0;i<line.length;i++){ const ch=line[i]; if(ch==='"'){ if(q && line[i+1]==='"'){ cur+='"'; i++; } else q=!q; } else if(ch===',' && !q){ out.push(cur); cur=''; } else cur+=ch; } out.push(cur); return out; }
-
-addForm.addEventListener('submit',(e)=>{
-  e.preventDefault();
-  const name=addName.value.trim(); const r=addRank.value.trim(); const div=addDivision.value.trim();
-  if(!name || !r) return alert('Name and Rank are required.');
-  spawnJudge(name, parseRank(r), div);
-  addName.value=''; addRank.value=''; addDivision.value=''; searchBox.value=''; rankFilter.value='';
-  layoutTray(); trayArea.parentElement.scrollTop=trayArea.scrollHeight;
-  if (window.queueSaveFirebase) window.queueSaveFirebase();
-});
-addJudgeBtn.addEventListener('click', ()=>{
-  const name=prompt('Judge name (include title if any):'); if(name===null) return;
-  const n=name.trim(); if(!n) return alert('Name is required.');
-  const rk=prompt('Rank (1–8):','6')||''; const div=prompt('Division code (optional):','')||'';
-  spawnJudge(n, parseRank(rk), div.trim()); searchBox.value=''; rankFilter.value='';
-  layoutTray(); trayArea.parentElement.scrollTop=trayArea.scrollHeight;
-  if (window.queueSaveFirebase) window.queueSaveFirebase();
-});
-[searchBox, rankFilter].forEach(el=> el.addEventListener('input', layoutTray));
-clearSearchBtn.addEventListener('click', ()=>{ searchBox.value=''; layoutTray(); });
-
-/* -------------------- SAVE/LOAD SNAPSHOT -------------------- */
-function snapshotState(name){
-  const judges=Array.from(tiles.values()).map(t=>({ id:t.id, name:t.name, rankNum:t.rankNum, division:t.division, placed:t.placed, slotIndex:t.slotIndex }));
-  return { name, rings, rows, cols, ringDivisions, ringCategories, judges };
-}
-function placeTileAtSlotIndex(tile, idx){
-  const slot=document.querySelectorAll('.slot')[idx]; if(!slot) return;
-  const sr=slot.getBoundingClientRect(), pr=tile.el.offsetParent.getBoundingClientRect();
-  tile.el.style.left=(sr.left-pr.left + (sr.width - tile.el.offsetWidth)/2) + 'px';
-  tile.el.style.top =(sr.top -pr.top  + (sr.height- tile.el.offsetHeight)/2) + 'px';
-}
-function clearTiles(){ tiles.forEach(t=>t.el.remove()); tiles.clear(); trayArea.innerHTML=''; }
-function restoreState(data){
-  tNameEl.value=data.name||'';
-  rings=data.rings||12; cols=Math.min(3, data.cols || Math.ceil(Math.sqrt(rings))); rows=Math.ceil(rings/cols);
-  renderGrid(rows, cols, rings);
-  ringDivisions=data.ringDivisions || new Array(rings).fill(''); ringDivisionsNorm=ringDivisions.map(normalizeDivision);
-  ringCategories=data.ringCategories || new Array(rings).fill('Color');
-
-  clearTiles(); slotsOccupied=new Array(rings*SLOTS_PER_RING).fill(null); idCounter=1;
-
-  for(const j of (data.judges||[])){
-    spawnJudge(j.name, parseRank(j.rankNum), j.division);
-    const t=tiles.get(`J${idCounter-1}`); if(!t) continue;
-    if(j.placed && typeof j.slotIndex==='number' && j.slotIndex>=0){
-      slotsOccupied[j.slotIndex]=t.id; t.placed=true; t.slotIndex=j.slotIndex; t.el.dataset.placed='true';
-      const slot=document.querySelectorAll('.slot')[j.slotIndex];
-      if(slot){ slot.dataset.filled='true'; slot.textContent=`${t.name} — ${t.rankNum} Dan`; const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×'; slot.appendChild(clear); placeTileAtSlotIndex(t, j.slotIndex); }
-    }
-  }
-  recomputeCompeting(); layoutTray();
-  metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols} · ${tiles.size} judges`;
-}
-
-/* -------------------- INIT (empty until you Load/Create) -------------------- */
-(function init(){
-  // start with a blank, unsaved layout for quick testing:
-  rings=12; cols=Math.min(3, Math.ceil(Math.sqrt(rings))); rows=Math.ceil(rings/cols); renderGrid(rows, cols, rings);
-  metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols}`;
-})();
-</script>
-
-<!-- -------------------- FIREBASE (shared-only) -------------------- -->
-<script type="module">
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-
-const firebaseConfig = {
-  apiKey: "AIzaSyCBaGMG94xzLfQSW7vFosHzt_hUtytZips",
-  authDomain: "ataringjudge.firebaseapp.com",
-  projectId: "ataringjudge",
-  storageBucket: "ataringjudge.firebasestorage.app",
-  messagingSenderId: "340031439257",
-  appId: "1:340031439257:web:d09a5f52788d97c9e65308",
-  measurementId: "G-QK4CMZ27Q7"
-};
-const app = initializeApp(firebaseConfig);
-const db  = getFirestore(app);
-
-// global helpers for debounced saving
-let unsubscribe = null;
-window.activeTournament = "";
-
-window.firebaseSave = async function firebaseSave() {
-  if (!window.activeTournament) return;
-  const data = snapshotState(window.activeTournament);
-  await setDoc(doc(db, "tournaments", window.activeTournament), data, { merge: true });
-};
-window.queueSaveFirebase = (()=>{
-  let t; return function(){ if(!window.activeTournament) return; clearTimeout(t); t=setTimeout(()=>window.firebaseSave(), 400); };
-})();
-
-async function connectTournament(name){
-  if (unsubscribe) { unsubscribe(); unsubscribe=null; }
-  window.activeTournament = name;
-
-  const ref=doc(db,"tournaments",name);
-  const snap=await getDoc(ref);
-  if(!snap.exists()){
-    await setDoc(ref, snapshotState(name));       // create empty doc from current UI
-  }else{
-    restoreState(snap.data());                    // load
-  }
-  unsubscribe = onSnapshot(ref, (s)=>{ if(s.exists()) restoreState(s.data()); });
-}
-
-document.getElementById('createBtn')?.addEventListener('click', async (e)=>{
-  e.preventDefault();
-  const name=(document.getElementById('tournamentName').value||'').trim();
-  if(!name) return alert('Enter a tournament name first.');
-  await connectTournament(name);
-  alert(`Created/connected: ${name} (live)`);
-});
-document.getElementById('loadBtn')?.addEventListener('click', async (e)=>{
-  e.preventDefault();
-  const ask = prompt('Open tournament (exact name):', (document.getElementById('tournamentName').value||'').trim());
-  if (ask===null) return;
-  const name = ask.trim(); if(!name) return;
-  document.getElementById('tournamentName').value = name;
-  await connectTournament(name);
-  alert(`Connected to “${name}”. Live updates enabled.`);
+  // rank guard
+  const cat=ringCategories[ringIdx] || 'Color';
+  if(!judgeEligibleFor(cat, tile.rankNum)){ alert('Judge rank not eligible for this ring'); return false

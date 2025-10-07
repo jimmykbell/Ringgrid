@@ -185,17 +185,47 @@ function parseRank(val){
 function normalizeDivision(s){ return (s||'').toString().trim().replace(/\s+/g,'').toUpperCase(); }
 
 /* -------------------- UI BUILD -------------------- */
-function newLayout(){
-  const rStr=prompt('How many rings?','12'); if(rStr===null) return;
-  rings=Math.max(1, parseInt(rStr,10)||0);
-  cols=3; rows=Math.ceil(rings/cols);
+<script>
+// --- New Rings: prompt, clear judges+placements, redraw grid ---
+function newLayout() {
+  const rStr = prompt('How many rings?', String(rings || 12));
+  if (rStr === null) return;
+  const n = Math.max(1, parseInt(rStr, 10) || 0);
+
+  // clear judges UI/state
+  if (typeof clearTiles === 'function') clearTiles();
+  tiles = new Map();
+  idCounter = 1;
+
+  // recompute grid (3 columns so it fits 75/25)
+  rings = n;
+  cols  = Math.min(3, Math.ceil(Math.sqrt(rings)));
+  rows  = Math.ceil(rings / cols);
+
+  // render fresh grid & empty slot map
   renderGrid(rows, cols, rings);
-  // CLEAR judges & placements
-  clearTiles(); slotsOccupied=new Array(rings*SLOTS_PER_RING).fill(null); idCounter=1;
-  metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols}`;
-  layoutTray();
-  queueSave();
+  slotsOccupied = new Array(rings * SLOTS_PER_RING).fill(null);
+  ringDivisions = new Array(rings).fill('');
+  ringDivisionsNorm = new Array(rings).fill('');
+  ringCategories = new Array(rings).fill('Color');
+
+  // update UI labels
+  const metaEl = document.getElementById('meta');
+  if (metaEl) metaEl.textContent = `Rings: ${rings} · Grid: ${rows}×${cols}`;
+
+  // keep the right panel tidy
+  if (typeof layoutTray === 'function') layoutTray();
 }
+
+// make sure the button is bound once
+(function bindNewRings() {
+  const btn = document.getElementById('newBtn');
+  if (!btn) return;
+  btn.type = 'button';
+  btn.onclick = (e) => { e.preventDefault(); newLayout(); };
+})();
+</script>
+
 function renderGrid(r,c,total){
   meshEl.innerHTML='';
   ringDivisions=new Array(total).fill('');

@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Judge Assignment — Right Panel to Rings</title>
+<title>Judge Assignment — Firebase Live</title>
 <style>
   :root{
     --ring-w: 220px;
@@ -19,18 +19,16 @@
     display:grid; grid-template-rows:auto 1fr; gap:14px; padding:14px; overflow-x:hidden;
   }
   header{
-    position:sticky; top:0; z-index:5;
     display:grid; grid-template-columns:1fr auto auto auto auto; gap:10px; align-items:center;
-    background:linear-gradient(#0b1220,#0b1220); padding-bottom:4px;
   }
   h1{font-size:18px;margin:0;font-weight:800}
-  .tname{display:flex;align-items:center;gap:8px}
-  .tname input{width:360px;max-width:100%;background:#0b1b3a;color:var(--ink);
+  .tname{display:flex;align-items:center;gap:8px;min-width:0}
+  .tname input{width:320px;max-width:100%;background:#0b1b3a;color:var(--ink);
     border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 12px;font-weight:800}
   button,label.btn{border:0;border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer;background:#1b2848;color:var(--ink)}
   button.primary{background:var(--accent);color:#fff}
   input[type=file]{display:none}
-  .meta{color:var(--muted);font-size:13px;margin-left:6px}
+  .meta{color:var(--muted);font-size:13px;margin-left:6px;white-space:nowrap}
 
   /* Stage: 75% / 25% */
   .stage{display:grid;grid-template-columns:3fr 1fr;gap:14px;min-height:min(82vh,860px)}
@@ -68,7 +66,6 @@
   .tile[data-competing=true]{filter:grayscale(1) brightness(.85);box-shadow:0 0 0 2px var(--danger) inset;cursor:not-allowed}
 
   .hint{font-size:12px;color:var(--muted)}
-  /* small screens: collapse to 2 columns if necessary */
   @media (max-width: 980px){
     .grid-mesh{grid-template-columns:repeat(2,minmax(0,var(--ring-w)))}
   }
@@ -77,16 +74,13 @@
 <body>
 <header>
   <div class="tname">
-    <h1>Judge Assignment — Right Panel to Rings</h1>
-    <input id="tournamentName" placeholder="Tournament name…"/>
+    <h1>Judge Assignment — Firebase Live</h1>
+    <input id="tournamentName" placeholder="Tournament name (create / join)…"/>
   </div>
+  <button id="createJoinBtn" class="btn">Create / Join</button>
   <button id="newBtn" class="primary">New Rings</button>
   <button id="addJudgeBtn" class="btn">Add Judge</button>
   <label class="btn" for="csvInput">Import Judges (CSV)</label><input id="csvInput" type="file" accept=".csv"/>
-  <div style="display:flex;gap:8px;">
-    <button id="saveBtn" class="btn">Save</button>
-    <button id="loadBtn" class="btn">Load</button>
-  </div>
   <span class="meta" id="meta"></span>
 </header>
 
@@ -97,7 +91,6 @@
   <!-- RIGHT -->
   <aside class="tray">
     <div class="tray-header"><div class="tray-title">Judges (drag →)</div></div>
-
     <div class="search">
       <input id="searchBox" type="text" placeholder="Search judges by name…"/>
       <button id="clearSearch" class="btn">Clear</button>
@@ -109,12 +102,11 @@
         <option value="6-8">Rank 6–8</option>
       </select>
     </div>
-
     <div class="tray-scroll"><div class="tray-area" id="trayArea"></div></div>
   </aside>
 </div>
 
-<div class="hint">• “New Rings” clears all judges & placements. • Rank is a single number (1–8) and drives eligibility. • Division code auto-marks competing judges and blocks those placements.</div>
+<div class="hint">• Enter a tournament name and click “Create / Join” to sync via Firebase. • “New Rings” clears all judges & placements. • Rank is a single number (1–8) and drives eligibility. • Division code blocks judges from their own division.</div>
 
 <!-- Add Judge dialog -->
 <dialog id="addJudgeDialog" style="border:0;border-radius:12px;padding:16px;background:#0d1a36;color:#e6ecff;max-width:520px;width:92%">
@@ -164,8 +156,7 @@ const clearSearchBtn=document.getElementById('clearSearch');
 const rankFilter=document.getElementById('rankFilter');
 const addJudgeBtn=document.getElementById('addJudgeBtn');
 const tNameEl=document.getElementById('tournamentName');
-const saveBtn=document.getElementById('saveBtn');
-const loadBtn=document.getElementById('loadBtn');
+const createJoinBtn=document.getElementById('createJoinBtn');
 
 /* per-ring data */
 let ringDivisions=[];     // raw
@@ -174,7 +165,6 @@ let ringCategories=[];    // label
 let ringMinRank=[];       // numeric minimum
 
 /* -------------------- RANK / CATEGORY LOGIC -------------------- */
-// Minimum rank needed to judge each ring category
 function catToMinRank(cat){
   switch((cat||'').toLowerCase()){
     case 'tiger':       return 1;  // 1+ can judge
@@ -186,7 +176,6 @@ function catToMinRank(cat){
     default:            return 1;
   }
 }
-// Parse numeric rank from various inputs; default 6 if unclear
 function parseRank(val){
   if (typeof val === 'number') return Math.max(1, Math.min(8, Math.floor(val)));
   const s=String(val||'').trim();
@@ -205,6 +194,7 @@ function newLayout(){
   clearTiles(); slotsOccupied=new Array(rings*SLOTS_PER_RING).fill(null); idCounter=1;
   metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols}`;
   layoutTray();
+  queueSave();
 }
 function renderGrid(r,c,total){
   meshEl.innerHTML='';
@@ -249,17 +239,17 @@ function onDivisionChange(ringIdx, code){
     const t=tiles.get(id); if(!t) continue;
     if(t.divNorm && ringDivisionsNorm[ringIdx] && t.divNorm===ringDivisionsNorm[ringIdx]){ slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t); }
   }
-  recomputeCompeting(); updateRingFull(ringIdx); layoutTray();
+  recomputeCompeting(); updateRingFull(ringIdx); layoutTray(); queueSave();
 }
 function onCategoryChange(ringIdx, cat){
   ringCategories[ringIdx]=cat; ringMinRank[ringIdx]=catToMinRank(cat);
-  // auto-remove now-ineligible judges already in this ring
+  // auto-remove now-ineligible judges
   for(let s=0;s<SLOTS_PER_RING;s++){
     const idx=ringIdx*SLOTS_PER_RING+s; const id=slotsOccupied[idx]; if(!id) continue;
     const t=tiles.get(id); if(!t) continue;
     if(t.level < ringMinRank[ringIdx]){ slotsOccupied[idx]=null; resetSlotUI(idx); returnToTray(t); }
   }
-  updateRingFull(ringIdx); layoutTray();
+  updateRingFull(ringIdx); layoutTray(); queueSave();
 }
 
 /* -------------------- JUDGES -------------------- */
@@ -270,21 +260,20 @@ function spawnJudge(name, rankNum, division){
   const state={ id, name, rank:String(level), division:divText, divNorm:normalizeDivision(divText), level, competing:false, el, placed:false, slotIndex:-1, startLeft:10, startTop:10 };
   tiles.set(id,state);
   el.innerHTML=`<div><div class="t-name">${name||'Unnamed'}</div><div class="t-rank">Rank ${level}</div></div><div class="t-id">${divText?`<span class='t-badge'>${divText}</span>`:''}</div>`;
-  enableDrag(state); recomputeCompeting(); layoutTray();
+  enableDrag(state); recomputeCompeting(); layoutTray(); queueSave();
 }
 function returnToTray(tile){ tile.placed=false; tile.slotIndex=-1; tile.el.dataset.placed='false'; }
 function layoutTray(){
   const q=(searchBox.value||'').trim().toLowerCase();
   const rf=rankFilter.value;
   let y=10;
-  const parent=trayArea.parentElement;
-  const styles=getComputedStyle(parent);
+  const parent=trayArea.parentElement; const styles=getComputedStyle(parent);
   const pLeft=parseFloat(styles.paddingLeft)||0, pRight=parseFloat(styles.paddingRight)||0;
   const usableW=Math.max(0, parent.clientWidth - pLeft - pRight - 20);
   const leftPad=pLeft+8;
 
-  tiles.forEach(t=>{
-    if(t.placed) return;
+  // simple stable order: by level desc, then name
+  const list = Array.from(tiles.values()).filter(t=>!t.placed).filter(t=>{
     let pass=!q || (t.name && t.name.toLowerCase().includes(q));
     if(pass){
       if(rf==='1') pass = (t.level===1);
@@ -292,15 +281,19 @@ function layoutTray(){
       else if(rf==='4-5') pass = (t.level>=4 && t.level<=5);
       else if(rf==='6-8') pass = (t.level>=6 && t.level<=8);
     }
-    t.el.style.display = pass ? 'grid' : 'none';
-    if(pass){
-      t.el.style.width=usableW+'px';
-      t.el.style.left=leftPad+'px';
-      t.el.style.top=y+'px';
-      t.startLeft=10; t.startTop=y;
-      y += (t.el.offsetHeight||66)+10;
-    }
-  });
+    return pass;
+  }).sort((a,b)=> (b.level-a.level) || (a.name||'').localeCompare(b.name||''));
+
+  tiles.forEach(t=>{ if(!t.placed) t.el.style.display='none'; });
+
+  for(const t of list){
+    t.el.style.display='grid';
+    t.el.style.width=usableW+'px';
+    t.el.style.left=leftPad+'px';
+    t.el.style.top=y+'px';
+    t.startLeft=10; t.startTop=y;
+    y += (t.el.offsetHeight||66)+10;
+  }
 }
 
 /* -------------------- DRAG / DROP -------------------- */
@@ -346,7 +339,7 @@ function trySnapToNearestSlot(tile, clientX, clientY){
   slotsOccupied[idx]=tile.id; tile.placed=true; tile.slotIndex=idx; tile.el.dataset.placed='true';
   slot.dataset.filled='true'; slot.textContent = `${tile.name} — Rank ${tile.level}`;
   const clear=document.createElement('button'); clear.className='clear'; clear.type='button'; clear.title='Remove judge'; clear.textContent='×'; slot.appendChild(clear);
-  layoutTray(); updateRingFull(ringIdx);
+  layoutTray(); updateRingFull(ringIdx); queueSave();
   return true;
 }
 function findBestSlot(x,y){
@@ -367,7 +360,7 @@ function bounceBack(tile){ if(tile.placed && tile.slotIndex!==-1) return; tile.e
 document.getElementById('gridMesh').addEventListener('click', (e)=>{
   const btn=e.target.closest('.clear'); if(!btn) return;
   const slot=btn.closest('.slot'); const idx=slotIndexFromDataset(slot); const id=slotsOccupied[idx]; if(!id) return;
-  const tile=tiles.get(id); slotsOccupied[idx]=null; resetSlotUI(idx); if(tile) returnToTray(tile); updateRingFull(parseInt(slot.dataset.ring,10)); layoutTray();
+  const tile=tiles.get(id); slotsOccupied[idx]=null; resetSlotUI(idx); if(tile) returnToTray(tile); updateRingFull(parseInt(slot.dataset.ring,10)); layoutTray(); queueSave();
 });
 
 /* -------------------- UTIL -------------------- */
@@ -459,32 +452,21 @@ searchBox.addEventListener('input', layoutTray);
 clearSearchBtn.addEventListener('click', ()=>{ searchBox.value=''; layoutTray(); });
 rankFilter.addEventListener('change', layoutTray);
 
-/* -------------------- SAVE / LOAD (optional) -------------------- */
-saveBtn.addEventListener('click', ()=>{
-  const name=(tNameEl.value||'').trim(); if(!name) return alert('Enter a tournament name first.');
-  const data=snapshotState(name);
-  localStorage.setItem(`tournaments.${name}`, JSON.stringify(data));
-  const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]');
-  if(!idx.includes(name)){ idx.push(name); localStorage.setItem('tournaments.index', JSON.stringify(idx)); }
-  alert('Saved.');
-});
-loadBtn.addEventListener('click', ()=>{
-  const idx=JSON.parse(localStorage.getItem('tournaments.index')||'[]'); if(!idx.length) return alert('No saved tournaments.');
-  const name=prompt(`Load which tournament?\n${idx.join(', ')}`); if(!name) return;
-  const data=JSON.parse(localStorage.getItem(`tournaments.${name}`)||'null'); if(!data) return alert('Not found.');
-  restoreState(data); alert(`Loaded: ${name}`);
-});
+/* -------------------- SNAPSHOT / RESTORE -------------------- */
 function snapshotState(name){
   const judges=Array.from(tiles.values()).map(t=>({ id:t.id, name:t.name, rank:t.rank, division:t.division, level:t.level, placed:t.placed, slotIndex:t.slotIndex }));
   return { name, rings, rows, cols, ringDivisions, ringCategories, ringMinRank, judges };
 }
 function restoreState(data){
-  tNameEl.value=data.name||''; rings=data.rings; rows=data.rows; cols=3;
+  // build grid
+  rings=data.rings||12; cols=3; rows=Math.ceil(rings/cols);
   renderGrid(rows, cols, rings);
   ringDivisions=data.ringDivisions||new Array(rings).fill(''); ringDivisionsNorm=ringDivisions.map(normalizeDivision);
   ringCategories=data.ringCategories||new Array(rings).fill('Color');
   ringMinRank=(data.ringMinRank && data.ringMinRank.length===rings) ? data.ringMinRank : ringCategories.map(catToMinRank);
   document.querySelectorAll('.ring').forEach((ringEl,i)=>{ const div=ringEl.querySelector('.ring-division'); if(div) div.value=ringDivisions[i]||''; const sel=ringEl.querySelector('.ring-category'); if(sel) sel.value=ringCategories[i]||'Color'; });
+
+  // judges
   clearTiles(); slotsOccupied=new Array(rings*SLOTS_PER_RING).fill(null); idCounter=1;
   for(const j of (data.judges||[])){
     spawnJudge(j.name, parseRank(j.rank), j.division);
@@ -522,10 +504,81 @@ function recomputeCompeting(){
 /* -------------------- INIT -------------------- */
 (function init(){
   rings=12; cols=3; rows=Math.ceil(rings/cols); renderGrid(rows, cols, rings);
-  // no demo judges by default
   metaEl.textContent=`Rings: ${rings} · Grid: ${rows}×${cols}`;
   layoutTray();
 })();
+window.snapshotState = snapshotState;
+window.restoreState  = restoreState;
+</script>
+
+<!-- Firebase Live Sync -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCBaGMG94xzLfQSW7vFosHzt_hUtytZips",
+    authDomain: "ataringjudge.firebaseapp.com",
+    projectId: "ataringjudge",
+    storageBucket: "ataringjudge.firebasestorage.app",
+    messagingSenderId: "340031439257",
+    appId: "1:340031439257:web:d09a5f52788d97c9e65308",
+    measurementId: "G-QK4CMZ27Q7",
+    databaseURL: "https://ataringjudge-default-rtdb.firebaseio.com"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db  = getDatabase(app);
+
+  const tNameEl = document.getElementById('tournamentName');
+  const createJoinBtn = document.getElementById('createJoinBtn');
+
+  let currentKey = null;
+  let detach = null;
+  let savingBlock = false;
+  let saveTimer  = null;
+
+  function saveDebounced(){
+    if(!currentKey || savingBlock) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(()=>{
+      const data = window.snapshotState(currentKey);
+      set(ref(db, `tournaments/${currentKey}`), { ...data, updatedAt: Date.now() });
+    }, 400);
+  }
+
+  // expose to main script calls
+  window.queueSave = saveDebounced;
+
+  function attach(key){
+    if(detach){ detach(); detach=null; }
+    currentKey = key;
+    const r = ref(db, `tournaments/${key}`);
+    const unsub = onValue(r, (snap)=>{
+      const data = snap.val();
+      if(!data){
+        // initialize empty with current local state
+        const init = window.snapshotState(key);
+        set(r, { ...init, updatedAt: Date.now() });
+        return;
+      }
+      savingBlock = true;
+      window.restoreState(data);
+      savingBlock = false;
+    });
+    detach = ()=>unsub();
+  }
+
+  createJoinBtn.addEventListener('click', ()=>{
+    const name = (tNameEl.value || '').trim();
+    if(!name){ alert('Enter a tournament name'); return; }
+    // simple key
+    const key = name.replace(/[^\w\-]+/g,'_');
+    attach(key);
+  });
+
+  // Hook important state-changing places from main script to auto-save
+  // If queueSave() is called there, it routes to saveDebounced() here.
 </script>
 </body>
 </html>

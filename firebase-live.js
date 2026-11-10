@@ -13,12 +13,13 @@ const bridge=window.RinggridBridge;
 const $=id=>document.getElementById(id);
 const enabled=(location.protocol==='https:'||new URLSearchParams(location.search).get('live')==='1')&&firebaseConfig?.projectId;
 let db,auth,unsubTournament=null,unsubPrivate=null,unsubPublic=null,unsubCheckins=null,unsubRegistrations=null;
-let isAdmin=false,activeTournamentId=null,fullSnapshot=null,publicSnapshot=null,checkedInIds=new Set();
+let isAdmin=false,isOwner=false,activeTournamentId=null,fullSnapshot=null,publicSnapshot=null,checkedInIds=new Set();
 let savesInFlight=Promise.resolve(),saveTimer=null,remoteApplication=false,unsubPhone=null;
 const base='rg23_tournaments',adm='rg23_admins';
 const errText=e=>e?.code?`${e.code}: ${e.message||''}`:e?.message||String(e);
 function badge(text,color=''){$('connectionBadge').textContent=text;$('connectionBadge').className='demo '+color}
 function throwIfNotAdmin(){if(!isAdmin||!auth.currentUser||auth.currentUser.isAnonymous)throw Error('An authorized Firebase Admin sign-in is required.')}
+function throwIfNotOwner(){if(!isOwner||!auth.currentUser||auth.currentUser.isAnonymous)throw Error('Only the Ringgrid Owner can create or delete tournaments. Set your account role to owner in rg23_admins.')}
 const tournamentRef=id=>doc(db,base,id);
 const privateRef=id=>doc(db,base,id,'private','state');
 const publicRef=id=>doc(db,base,id,'public','state');
@@ -29,12 +30,12 @@ function mergePresence(snapshot){if(!snapshot)return snapshot;const s=structured
 function displayRemote(){const data=isAdmin?fullSnapshot:publicSnapshot;if(!data)return;bridge.applyRemoteState(mergePresence(data));}
 function clearSubscriptions(){for(const unsub of [unsubTournament,unsubPrivate,unsubPublic,unsubCheckins,unsubRegistrations,unsubPhone])if(unsub)unsub();unsubTournament=unsubPrivate=unsubPublic=unsubCheckins=unsubRegistrations=unsubPhone=null;fullSnapshot=publicSnapshot=null;checkedInIds=new Set()}
 
-async function ensureAdmin(){const user=auth.currentUser;if(!user||user.isAnonymous){isAdmin=false;return false}
- const r=await getDoc(doc(db,adm,user.uid));isAdmin=!!r.exists()&&r.data()?.role==='admin';return isAdmin}
+async function ensureAdmin(){const user=auth.currentUser;if(!user||user.isAnonymous){isAdmin=false;isOwner=false;return false}
+ const r=await getDoc(doc(db,adm,user.uid));const role=r.exists()?r.data()?.role:null;isOwner=role==='owner';isAdmin=isOwner||role==='admin';return isAdmin}
 async function login(email,password){if(!enabled)throw Error('Firebase Live is not enabled on this address.');if(!email||!password)throw Error('Enter your Admin email and password.');
  const credential=await signInWithEmailAndPassword(auth,email,password);const okay=await ensureAdmin();if(!okay){await signOut(auth);await signInAnonymously(auth);throw Error('This account is not authorized in rg23_admins. Add your Firebase UID as an Admin in Firestore.')}
  bridge.setAdminAuthed(true);$('loginUser').value=email;badge('● FIREBASE LIVE · ADMIN','live-status');if(activeTournamentId)attachPrivate(activeTournamentId);return credential.user}
-async function logout(){clearPrivileged();isAdmin=false;bridge.setAdminAuthed(false);await signOut(auth);await signInAnonymously(auth);if(activeTournamentId)displayRemote();badge('● FIREBASE LIVE · JUDGE','live-status')}
+async function logout(){clearPrivileged();isAdmin=false;isOwner=false;bridge.setAdminAuthed(false);await signOut(auth);await signInAnonymously(auth);if(activeTournamentId)displayRemote();badge('● FIREBASE LIVE · JUDGE','live-status')}
 function clearPrivileged(){if(unsubPrivate)unsubPrivate();if(unsubRegistrations)unsubRegistrations();if(unsubPhone)unsubPhone();unsubPrivate=unsubRegistrations=unsubPhone=null;fullSnapshot=null}
 
 function attachPrivate(id){clearPrivileged();if(!isAdmin||!id)return;
@@ -46,11 +47,25 @@ function selectTournament(id){clearSubscriptions();activeTournamentId=id;unsubPu
  if(isAdmin)attachPrivate(id)}
 function leaveTournament(){clearSubscriptions();activeTournamentId=null}
 
-async function createTournament(details,initialState){throwIfNotAdmin();const id='rg-'+crypto.randomUUID().slice(0,20);const batch=writeBatch(db);
+async function createTournament(details,initialState){throwIfNotOwner();const id='rg-'+crypto.randomUUID().slice(0,20);const batch=writeBatch(db);
  batch.set(tournamentRef(id),{...details,id,createdAt:serverTimestamp(),createdBy:auth.currentUser.uid});
  batch.set(privateRef(id),{state:initialState,updatedAt:serverTimestamp()});
  batch.set(publicRef(id),{state:safePublic(initialState),updatedAt:serverTimestamp()});
  await batch.commit();return id}
+
+// Owner-only permanent deletion of all known Ringgrid 2.3 tournament subcollections.
+// Child documents must be deleted before the parent; Firestore does not cascade deletions.
+async function deleteTournament(id){throwIfNotOwner();if(!id)throw Error('No tournament selected');
+ if(saveTimer){clearTimeout(saveTimer);saveTimer=null}await savesInFlight;
+ if(activeTournamentId===id){clearSubscriptions();activeTournamentId=null}
+ const subcollections=['checkins','registrations','phoneUpdates','private','public'];
+ for(const name of subcollections){
+  const snapshot=await getDocs(collection(db,base,id,name));
+  for(let i=0;i<snapshot.docs.length;i+=300){const batch=writeBatch(db);for(const document of snapshot.docs.slice(i,i+300))batch.delete(document.ref);await batch.commit()}
+ }
+ await deleteDoc(tournamentRef(id));
+ return true;
+}
 
 // Admin writes are coalesced so consecutive drag/drop actions don't flood a document.
 function saveAdminState(id,state){if(!enabled||!isAdmin||!id)return;fullSnapshot=structuredClone(state);
@@ -70,7 +85,7 @@ async function showPhoneRequests(id){throwIfNotAdmin();const snap=await getDocs(
 async function approvePhone(id,requestId,judgeId,phone){throwIfNotAdmin();bridge.applyPhoneUpdate(judgeId,phone);await deleteDoc(doc(db,base,id,'phoneUpdates',requestId));await showPhoneRequests(id)}
 document.addEventListener('click',e=>{let target=e.target.closest('[data-approve-phone]');if(target){approvePhone(activeTournamentId,target.dataset.approvePhone,target.dataset.judgeId,target.dataset.phone).catch(e=>bridge.notify(errText(e)))}});
 
-window.RinggridLive={enabled:!!enabled,isAdmin:()=>isAdmin,login,logout,selectTournament,leaveTournament,createTournament,saveAdminState,setCheckin,submitRegistration,deleteRegistration,requestPhoneUpdate,showPhoneRequests};
+window.RinggridLive={enabled:!!enabled,isAdmin:()=>isAdmin,isOwner:()=>isOwner,login,logout,selectTournament,leaveTournament,createTournament,deleteTournament,saveAdminState,setCheckin,submitRegistration,deleteRegistration,requestPhoneUpdate,showPhoneRequests};
 
 if(enabled){
  badge('● CONNECTING FIREBASE…','');

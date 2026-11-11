@@ -95,3 +95,23 @@
 .urgent-notice p{margin:7px 0 0}.required-checkin-phone{display:block;margin:12px 0;font-weight:700}.required-checkin-phone input{width:100%;display:block;margin-top:6px;font-size:16px}
 .rttl-request{padding:12px;margin:8px 0;border:1px solid #475c7f;border-radius:11px;background:#132743}.rttl-request>div{font-size:13px;color:#bed1f1;margin:6px 0}.rttl-request p{white-space:pre-wrap;font-size:13px}
 .login-invite{margin:20px 0 0;border-top:1px solid #3e5275;padding-top:15px}.login-invite summary{cursor:pointer;font-weight:700}.login-invite form{margin-top:15px;display:grid;gap:12px}
+
+/* Ringgrid 2.3.4 — Fatigue meter, breaks and clean Admin action bar */
+.fatigue-face{display:inline-block;font-size:1.25em;line-height:1.25;vertical-align:middle;margin-left:4px;white-space:nowrap}
+.ring .fatigue-face{font-size:19px;margin-left:7px}
+.ring .person{display:flex;align-items:center;gap:3px;flex-wrap:wrap}
+.judge-row strong .fatigue-face{font-size:18px}
+.profile-top .fatigue-face{font-size:1.2em}
+.break-label{display:inline-block;margin-left:6px;font-size:10px;font-weight:800;color:#ffe0a0;background:#59472b;border-radius:6px;padding:2px 6px}
+.fatigue-break-control{display:flex;flex-wrap:wrap;gap:9px;align-items:center;background:#1b2c4b;border:1px solid #47618d;border-radius:12px;padding:14px;margin:13px 0}
+.fatigue-break-control strong{font-size:15px}
+.fatigue-break-control span{color:#bed2f0}
+.fatigue-break-control small{width:100%;color:#aebfdb}
+.fatigue-break-control button{margin-left:auto}
+.admin-settings{position:relative;z-index:20}
+.admin-settings>summary{list-style:none;border:1px solid #3b537b;border-radius:9px;padding:9px 13px;background:#243957;cursor:pointer;font-weight:700;color:#eef4ff}
+.admin-settings>summary::-webkit-details-marker{display:none}
+.admin-settings[open]>summary{background:#344f79}
+.admin-settings-panel{position:absolute;right:0;top:calc(100% + 9px);display:grid;gap:7px;min-width:220px;padding:12px;background:#172741;border:1px solid #47658e;border-radius:13px;box-shadow:0 12px 24px #0009}
+.admin-settings-panel button{width:100%;text-align:left}
+@media(max-width:700px){.admin-settings-panel{right:0}.fatigue-break-control button{margin-left:0;width:100%}}

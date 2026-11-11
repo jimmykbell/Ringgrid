@@ -33,12 +33,34 @@
     state.archivedRings ??= [];
     state.competitionLedger ??= [];
     state.rttlRequests ??= [];
-    state.judges.forEach(j => { j.ringsJudged ??= 0; j.creditedRingIds ??= []; j.hasCompeted ??= !!j.competing; j.completedDivisions ??= []; j.checkedIn ??= false; j.notifications ??= []; });
+    state.judges.forEach(j => { j.ringsJudged ??= 0; j.ringsSinceBreak ??= j.ringsJudged; j.onBreak ??= false; j.creditedRingIds ??= []; j.hasCompeted ??= !!j.competing; j.completedDivisions ??= []; j.checkedIn ??= false; j.notifications ??= []; });
     state.rings.forEach(r => r.event ??= 'OPEN');
     state.archivedRings.forEach(r => r.event ??= 'OPEN');
     function save() { localStorage.setItem(localStoreKey(), JSON.stringify(state)); if (remoteMode && window.RinggridLive?.isAdmin?.())
         window.RinggridLive.saveAdminState(activeTournamentId, structuredClone(state)); }
     function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+    const fatigueFaces = ['😎', '😁', '🙂', '😐', '😓', '🥵', '💀'];
+    const fatigueTitles = ['Fresh', 'All Smiles', 'Feeling Good', 'Getting Tired', 'Needs Coffee', 'Exhausted', 'Send Help!'];
+    function sinceBreak(j) { const value = Number(j.ringsSinceBreak ?? j.ringsJudged ?? 0); return Math.max(0, Number.isFinite(value) ? Math.floor(value) : 0); }
+    function fatigue(j) { const i = Math.min(6, sinceBreak(j)); return {emoji:fatigueFaces[i], title:fatigueTitles[i], count:sinceBreak(j)}; }
+    function fatigueBadge(j) { const x=fatigue(j); return `<span class="fatigue-face" title="${x.title} · ${x.count} divisions since break" aria-label="${x.title}, ${x.count} divisions since break">${x.emoji}</span>`; }
+    function canWork(j) { return !!j.checkedIn && !j.onBreak; }
+    function toggleBreak(id, start) {
+        const j=state.judges.find(x=>x.id===id);
+        if(!j) return;
+        if(start && !j.checkedIn) return toast('A judge must be checked in before taking a break');
+        if(start && j.competing) return toast('Finish their competition first');
+        if(!!j.onBreak===start) return;
+        j.onBreak=start;
+        if(start) j.ringsSinceBreak=0;
+        notify(j,start?'You are on break. Your fatigue meter has reset.':'Your break has ended.');
+        log(j.name+(start?' started a break':' returned from break'));
+        save(); renderAdmin();
+        if($('modal').open) $('modal').close();
+        manage(id);
+        toast(start?j.name+' is on break · fatigue reset to 😎':j.name+' is back from break');
+    }
+
     function toast(t) { $('toast').textContent = t; $('toast').style.display = 'block'; setTimeout(() => $('toast').style.display = 'none', 2400); }
     function log(t) { state.activity.unshift({ text: t, time: new Date().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) }); state.activity = state.activity.slice(0, 35); }
     function show(s) { screen = s; document.querySelectorAll('main.screen').forEach(x => x.hidden = x.id !== s); $('homeBtn').hidden = s === 'tournaments' || s === 'welcome'; if (s === 'tournaments')
@@ -77,7 +99,7 @@
         const original = state;
         const newState = blankSeed(t.ringCount);
         if ($('copyRoster').checked)
-            newState.judges = original.judges.map((j, i) => ({ ...j, id: 'J' + (i + 1), checkedIn: false, ring: null, competing: false, hasCompeted: false, completedDivisions: [], creditedRingIds: [], ringsJudged: 0, response: 'none', declineCleared: false, notifications: [] }));
+            newState.judges = original.judges.map((j, i) => ({ ...j, id: 'J' + (i + 1), checkedIn: false, ring: null, competing: false, hasCompeted: false, completedDivisions: [], creditedRingIds: [], ringsJudged: 0, ringsSinceBreak: 0, onBreak: false, response: 'none', declineCleared: false, notifications: [] }));
         newState.seq = newState.judges.length + 1;
         if (remoteMode) {
             try {
@@ -108,7 +130,7 @@
         state.archivedRings ??= [];
         state.competitionLedger ??= [];
     state.rttlRequests = remoteMode && adminAuthenticated ? cloudRTTL : (state.rttlRequests || []);
-        state.judges.forEach(j => { j.ringsJudged ??= 0; j.creditedRingIds ??= []; j.completedDivisions ??= []; j.checkedIn ??= false; j.notifications ??= []; });
+        state.judges.forEach(j => { j.ringsJudged ??= 0; j.ringsSinceBreak ??= j.ringsJudged; j.onBreak ??= false; j.creditedRingIds ??= []; j.completedDivisions ??= []; j.checkedIn ??= false; j.notifications ??= []; });
         if (screen === 'judge')
             renderJudge();
         if (screen === 'admin')
@@ -136,7 +158,7 @@
         if (!j)
             return;
         if (!yes && j.competing)
-            return toast('Finish competition before undoing check-in');
+            return toast('Finish competition before undoing check-in'); if (!yes && j.onBreak) return toast('End this judge’s break before undoing check-in');
         if (j.checkedIn === yes) return;
         if (yes && !j.hasPhone && !normalizePhone(j.phone)) {
             const formatted = formatPhone(suppliedPhone || $('checkinPhone')?.value || '');
@@ -163,14 +185,14 @@
     function assign(id, ring, slot = -1) { let j = state.judges.find(x => x.id === id); if (!j)
         return; if (ring && !state.rings.some(r => r.id === ring))
         return toast('Ring not found'); if (ring && j.competing)
-        return toast('Judge is competing; mark available first'); if (ring && state.judges.filter(x => x.ring === ring && x.id !== id).length >= state.rings.find(r => r.id === ring)?.capacity)
+        return toast('Judge is competing; mark available first'); if (ring && j.onBreak) return toast('End the judge’s break before assigning a ring'); if (ring && state.judges.filter(x => x.ring === ring && x.id !== id).length >= state.rings.find(r => r.id === ring)?.capacity)
         return toast('Ring is full'); j.ring = ring || null; j.slot = ring ? (slot >= 0 ? slot : [0, 1, 2].find(n => !state.judges.some(x => x.id !== id && x.ring === ring && x.slot === n)) ?? 0) : null; j.response = ring ? 'assigned' : 'none'; notify(j, ring ? 'Assigned to Ring ' + ring + '.' : 'Your ring assignment has been cleared.'); log(j.name + (ring ? ' assigned to Ring ' + ring : ' removed from assignment')); save(); renderAdmin(); toast('Ring assignment saved'); }
     function setCompete(id) { let j = state.judges.find(x => x.id === id); if (j?.division === 'JUDGE' || j?.eligibleToCompete === false) {
         toast('Judge-only registrations cannot compete');
         return;
     } if (!j)
         return; if (!j.competing && !j.checkedIn)
-        return toast('Judge must check in before competing'); if (!j.competing && j.ring) {
+        return toast('Judge must check in before competing'); if (!j.competing && j.onBreak) return toast('End this judge’s break before competition'); if (!j.competing && j.ring) {
         toast('Remove ' + j.name + ' from Ring ' + j.ring + ' before competing');
         return;
     } if (!j.competing && j.completedDivisions.includes(j.division)) {
@@ -202,11 +224,11 @@
         if (codes.includes(previous))
             selector.value = previous;
         const members = state.judges.filter(j => j.division === selector.value);
-        const blocked = members.filter(j => j.ring);
+        const blocked = members.filter(j => j.ring || j.onBreak);
         const absent = members.filter(j => !j.checkedIn);
         const already = members.filter(j => j.competing);
         const finished = members.filter(j => j.completedDivisions.includes(j.division));
-        $('divisionPreview').innerHTML = members.length ? `<div class="division-members">${members.map(j => `<div class="division-member"><strong>${esc(j.name)}</strong><small>${j.ring ? '🔒 Judging Ring ' + j.ring : j.competing ? 'Already competing' : j.completedDivisions.includes(j.division) ? '✓ Completed division' : !j.checkedIn ? 'Not checked in' : '✓ Available'}</small></div>`).join('')}</div>${blocked.length ? `<p class="blocked-message">Remove ${blocked.length} assigned judge(s) from their rings first.</p>` : ''}${absent.length ? `<p class="blocked-message">⚠ ${absent.length} missing judge(s) will be listed in the confirmation and skipped.</p>` : ''}` : '<p class="muted">Choose a division to load its registered judges.</p>';
+        $('divisionPreview').innerHTML = members.length ? `<div class="division-members">${members.map(j => `<div class="division-member"><strong>${esc(j.name)}</strong><small>${j.ring ? '🔒 Judging Ring ' + j.ring : j.competing ? 'Already competing' : j.completedDivisions.includes(j.division) ? '✓ Completed division' : !j.checkedIn ? 'Not checked in' : j.onBreak ? '☕ On break' : '✓ Available'}</small></div>`).join('')}</div>${blocked.length ? `<p class="blocked-message">Remove ${blocked.length} assigned judge(s) from their rings first.</p>` : ''}${absent.length ? `<p class="blocked-message">⚠ ${absent.length} missing judge(s) will be listed in the confirmation and skipped.</p>` : ''}` : '<p class="muted">Choose a division to load its registered judges.</p>';
         $('sendDivisionBtn').disabled = !members.some(j => j.checkedIn) || blocked.some(j => j.checkedIn) || already.length > 0 || finished.length > 0;
         $('sendDivisionBtn').textContent = members.length ? `Send ${members.filter(j => j.checkedIn && !j.competing && !j.completedDivisions.includes(j.division)).length} Checked-In to Competition` : 'Send Division to Competition';
         $('activeCompetitionDivisions').innerHTML = [...competitionGroups()].map(([code, judges]) => {
@@ -254,14 +276,14 @@
         ];
         for (const [key, rings] of entries) {
             $(key + 'Count').textContent = rings.length;
-            $(key + 'List').innerHTML = rings.map(r => { let count = state.judges.filter(j => j.ring === r.id).length; return `<button class="ring-jump" data-jump-ring="${r.id}"><strong>Ring ${r.id}</strong><small>${esc(r.code || 'No division')}${r.packet ? ' · Packet #' + esc(r.packet) : ''} · ${state.judges.filter(j=>j.ring===r.id && j.checkedIn).length}/${r.capacity || 3} present</small></button>`; }).join('') || '<p class="muted">None right now.</p>';
+            $(key + 'List').innerHTML = rings.map(r => { let count = state.judges.filter(j => j.ring === r.id).length; return `<button class="ring-jump" data-jump-ring="${r.id}"><strong>Ring ${r.id}</strong><small>${esc(r.code || 'No division')}${r.packet ? ' · Packet #' + esc(r.packet) : ''} · ${state.judges.filter(j=>j.ring===r.id && canWork(j)).length}/${r.capacity || 3} ready</small></button>`; }).join('') || '<p class="muted">None right now.</p>';
         }
     }
     function renderAdmin() {
         const deleteButton = $('deleteTournamentBtn');
         if (deleteButton) deleteButton.hidden = remoteMode ? !window.RinggridLive?.isOwner?.() : false;
         $('adminManagementBtn').hidden = remoteMode ? !window.RinggridLive?.isOwner?.() : false;
-        let assigned = state.judges.filter(j => j.ring).length, available = state.judges.filter(j => j.checkedIn && !j.ring && !j.competing).length;
+        let assigned = state.judges.filter(j => j.ring).length, available = state.judges.filter(j => canWork(j) && !j.ring && !j.competing).length;
         $('summary').textContent = `${state.judges.length} judges · ${assigned} assigned · ${available} available · ${state.judges.filter(j => !j.checkedIn).length} not checked in · ${state.judges.filter(j => j.competing).length} competing`;
         $('competitionCount').textContent = state.competitionLedger.reduce((n, x) => n + (Number(x.bodyCount) || 0), 0).toLocaleString();
         $('competingCount').textContent = state.judges.filter(j => j.competing).length;
@@ -270,7 +292,7 @@
         $('rttlCount').textContent=openRTTL.length;
         $('rttlRequestsList').innerHTML=openRTTL.length?openRTTL.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).map(x=>`<div class="rttl-request"><strong>${esc(x.reason==='break'?'Replacement for break':x.reason==='assignment'?'Need an assignment':'Other')}</strong><div>${esc(x.judgeName)} · Ring ${esc(x.ring)}</div>${x.details?`<p>${esc(x.details)}</p>`:''}<button class="primary" data-resolve-rttl="${esc(x.id)}">Mark Resolved</button></div>`).join(''):'<p class="muted">No open RTTL requests.</p>';
         $('pendingBadge').textContent = state.pending.length ? '(' + state.pending.length + ')' : '';
-        $('rings').innerHTML = state.rings.map(r => { let js = state.judges.filter(j => j.ring === r.id), color = r.event === 'OPEN' ? (js.length ? 'green' : 'red') : eventColor(r.event); return `<article class="ring event-${color}" data-ring="${r.id}"><div class="ring-top"><strong>Ring ${r.id}</strong><span class="status ${js.filter(j => j.checkedIn).length === r.capacity ? 'confirmed' : 'pending'}">${js.filter(j => j.checkedIn).length}/${r.capacity} present · ${js.length} assigned</span></div><div class="ring-sub">Division <strong>${esc(r.code || 'Not configured')}</strong>${r.code ? ` · ${r.bodyCount || 0} competitors` : ''}${r.packet ? ` · Packet #${esc(r.packet)}` : ''}</div><label class="ring-sub">Current Event<select data-ring-event="${r.id}">${events.map(v => `<option value="${esc(v)}" ${v === r.event ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label><div class="slots">${[0, 1, 2].map((slot) => { let j = js.find(x => x.slot === slot) || js.filter(x => x.slot == null)[slot]; return j ? `<div class="slot" draggable="true" data-drag="${j.id}"><div><small class="position-label">${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</small><div class="person"><button type="button" class="ring-judge-link" data-judge-actions="${esc(j.id)}" title="View details for ${esc(j.name)}">${esc(j.name)}</button></div><small>${j.rank}° · ${esc(j.division)} · ${j.checkedIn ? '✓ Checked In' : '⌛ Not Here Yet'}</small></div><button data-unassign="${j.id}" title="Remove">×</button></div>` : `<div class="slot empty" data-drop="${r.id}" data-slot="${slot}"><strong>${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</strong> · Drop judge here</div>`; }).join('')}</div><div class="ring-actions"><button class="primary" data-configure="${r.id}">${r.code ? 'Edit Division' : '+ Create Division'}</button><button data-fill="${r.id}">+ Assign Judge</button>${r.code ? `<button class="archive-btn" data-archive="${r.id}">Archive Division</button>` : ''}<button data-remove-ring="${r.id}" ${r.code || js.length ? 'disabled' : ''}>Remove Ring</button></div></article>`; }).join('');
+        $('rings').innerHTML = state.rings.map(r => { let js = state.judges.filter(j => j.ring === r.id), color = r.event === 'OPEN' ? (js.length ? 'green' : 'red') : eventColor(r.event); return `<article class="ring event-${color}" data-ring="${r.id}"><div class="ring-top"><strong>Ring ${r.id}</strong><span class="status ${js.filter(j => canWork(j)).length === r.capacity ? 'confirmed' : 'pending'}">${js.filter(j => canWork(j)).length}/${r.capacity} ready · ${js.length} assigned</span></div><div class="ring-sub">Division <strong>${esc(r.code || 'Not configured')}</strong>${r.code ? ` · ${r.bodyCount || 0} competitors` : ''}${r.packet ? ` · Packet #${esc(r.packet)}` : ''}</div><label class="ring-sub">Current Event<select data-ring-event="${r.id}">${events.map(v => `<option value="${esc(v)}" ${v === r.event ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label><div class="slots">${[0, 1, 2].map((slot) => { let j = js.find(x => x.slot === slot) || js.filter(x => x.slot == null)[slot]; return j ? `<div class="slot" draggable="true" data-drag="${j.id}"><div><small class="position-label">${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</small><div class="person"><button type="button" class="ring-judge-link" data-judge-actions="${esc(j.id)}" title="View details for ${esc(j.name)}">${esc(j.name)}</button>${fatigueBadge(j)}</div><small>${j.rank}° · ${esc(j.division)} · ${j.onBreak ? '☕ On Break' : j.checkedIn ? '✓ Checked In' : '⌛ Not Here Yet'}</small></div><button data-unassign="${j.id}" title="Remove">×</button></div>` : `<div class="slot empty" data-drop="${r.id}" data-slot="${slot}"><strong>${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</strong> · Drop judge here</div>`; }).join('')}</div><div class="ring-actions"><button class="primary" data-configure="${r.id}">${r.code ? 'Edit Division' : '+ Create Division'}</button><button data-fill="${r.id}">+ Assign Judge</button>${r.code ? `<button class="archive-btn" data-archive="${r.id}">Archive Division</button>` : ''}<button data-remove-ring="${r.id}" ${r.code || js.length ? 'disabled' : ''}>Remove Ring</button></div></article>`; }).join('');
         $('archiveCount').textContent = state.archivedRings.length + ' archived';
         $('archivedRings').innerHTML = state.archivedRings.length ? state.archivedRings.map(r => `<div class="archived-item"><div><strong>Ring ${r.id}</strong><small>${esc(r.code)}${r.packet ? ' · Packet #' + esc(r.packet) : ''} · ${esc(r.event)} · ${r.judges.length} judges</small></div><button data-view-archive="${r.archiveId}">View History</button></div>`).join('') : '<p class="muted">No archived rings yet.</p>';
         $('judgeTotal').textContent = state.judges.length;
@@ -283,11 +305,11 @@
                 el.innerHTML = rankOptions;
         }
         const matches = (j, prefix) => j.name.toLowerCase().includes($(prefix + 'Search').value.trim().toLowerCase()) && (!$(prefix + 'Rank').value || j.rank === Number($(prefix + 'Rank').value));
-        const card = (j) => `<div class="judge-row ${j.ring ? 'judge-assigned' : ''} ${j.competing ? 'judge-competing' : ''} ${!j.checkedIn ? 'judge-absent' : ''}" draggable="true" data-drag="${j.id}"><div><strong>${esc(j.name)}</strong>${j.ring ? `<span class="ring-label">RING ${j.ring} · ${['CENTER', 'JUDGE A', 'JUDGE B'][j.slot ?? 0]}</span>` : j.competing ? '<span class="competing-label">COMPETING</span>' : !j.checkedIn ? '<span class="absent-label">NOT CHECKED IN</span>' : '<span class="present-label">CHECKED IN</span>'}<small>${j.rank}° · ${esc(j.division)} · ${j.ringsJudged} rings judged · ${j.division === 'JUDGE' ? 'JUDGE' : j.hasCompeted ? 'Competed' : 'Not competed'}</small></div><button data-judge-actions="${j.id}">Manage</button></div>`;
+        const card = (j) => `<div class="judge-row ${j.ring ? 'judge-assigned' : ''} ${j.competing ? 'judge-competing' : ''} ${!j.checkedIn ? 'judge-absent' : ''}" draggable="true" data-drag="${j.id}"><div><strong>${esc(j.name)} ${fatigueBadge(j)}</strong>${j.onBreak ? '<span class="break-label">ON BREAK</span>' : ''}${j.ring ? `<span class="ring-label">RING ${j.ring} · ${['CENTER', 'JUDGE A', 'JUDGE B'][j.slot ?? 0]}</span>` : j.competing ? '<span class="competing-label">COMPETING</span>' : !j.checkedIn ? '<span class="absent-label">NOT CHECKED IN</span>' : '<span class="present-label">CHECKED IN</span>'}<small>${j.rank}° · ${esc(j.division)} · ${j.ringsJudged} total · ${sinceBreak(j)} since break · ${j.division === 'JUDGE' ? 'JUDGE' : j.hasCompeted ? 'Competed' : 'Not competed'}</small></div><button data-judge-actions="${j.id}">Manage</button></div>`;
         let search = $('search').value.toLowerCase(), sort = $('judgeSort').value, rank = $('rankFilter').value;
         const sorted = [...state.judges].filter(j => j.name.toLowerCase().includes(search) && (!rank || j.rank === Number(rank))).sort((a, b) => sort === 'rank' ? b.rank - a.rank || a.name.localeCompare(b.name) : sort === 'ringsAsc' ? a.ringsJudged - b.ringsJudged || a.name.localeCompare(b.name) : sort === 'ringsDesc' ? b.ringsJudged - a.ringsJudged || a.name.localeCompare(b.name) : sort === 'competed' ? Number(b.hasCompeted) - Number(a.hasCompeted) || a.name.localeCompare(b.name) : sort === 'notCompeted' ? Number(a.hasCompeted) - Number(b.hasCompeted) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
         $('judgeList').innerHTML = sorted.map(j => card(j) + `<div class="judge-message">${messageLink(j)}</div>`).join('') || '<p class="muted">No matching judges.</p>';
-        $('availableList').innerHTML = state.judges.filter(j => j.checkedIn && !j.ring && !j.competing && matches(j, 'available')).sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name)).map(j => card(j) + `<div class="judge-message">${messageLink(j)}</div>`).join('') || '<p class="muted">No matching available judges.</p>';
+        $('availableList').innerHTML = state.judges.filter(j => canWork(j) && !j.ring && !j.competing && matches(j, 'available')).sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name)).map(j => card(j) + `<div class="judge-message">${messageLink(j)}</div>`).join('') || '<p class="muted">No matching available judges.</p>';
         const missingQuery = $('notCheckedInSearch').value.trim().toLowerCase();
         $('notCheckedInList').innerHTML = state.judges.filter(j => !j.checkedIn && j.name.toLowerCase().includes(missingQuery)).sort((a, b) => a.name.localeCompare(b.name)).map(j => `<div class="judge-row judge-absent"><div><strong>${esc(j.name)}</strong><small>${j.rank}° · ${esc(j.division)}</small></div><button class="primary" data-admin-checkin="${j.id}">Check In</button></div>`).join('') || '<p class="muted">All matching judges have checked in.</p>';
         renderCompetitionControls();
@@ -304,14 +326,14 @@
         profile.hidden = false;
         inbox.hidden = false;
         const isShared = !j.phone && !j.hasPhone;
-        profile.innerHTML = `<div class="profile-top"><span class="avatar">${esc(j.name.split(' ').map(x => x[0]).join(''))}</span><div><h3>${esc(j.name)}</h3><p class="muted">${j.rank}° Black Belt · ${esc(j.division)} · ${j.ringsJudged} rings judged</p></div></div>
-<div class="arrival-status ${j.checkedIn ? 'arrived' : 'absent'}"><strong>${j.checkedIn ? '✓ Checked In' : 'Not Checked In'}</strong><span>${j.checkedIn ? 'You are marked present and available to judge.' : 'Confirm arrival; any preassigned ring remains yours.'}</span></div>
+        profile.innerHTML = `<div class="profile-top"><span class="avatar">${esc(j.name.split(' ').map(x => x[0]).join(''))}</span><div><h3>${esc(j.name)} ${fatigueBadge(j)}</h3><p class="muted">${j.rank}° Black Belt · ${esc(j.division)} · ${j.ringsJudged} total divisions · ${sinceBreak(j)} since last break${j.onBreak ? ' · On Break' : ''}</p></div></div>
+<div class="arrival-status ${j.checkedIn ? 'arrived' : 'absent'}"><strong>${j.checkedIn ? '✓ Checked In' : 'Not Checked In'}</strong><span>${j.onBreak ? 'You are on break. Your assignment stays on record.' : j.checkedIn ? 'You are marked present and ready to judge.' : 'Confirm arrival; any preassigned ring remains yours.'}</span></div>
 ${!j.checkedIn ? `${!j.hasPhone && !normalizePhone(j.phone) ? `<label class="required-checkin-phone">Mobile number required to check in<input id="checkinPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="12" placeholder="888-123-4567" required></label>` : ''}<button class="primary wide-button" data-judge-checkin="${j.id}">✓ I'm Here — Check In</button>` : ''}
 <div class="assignment-label">YOUR CURRENT RING ASSIGNMENT</div>
 <div class="assignment">${j.ring ? 'RING ' + j.ring : j.competing ? 'CURRENTLY COMPETING' : 'No Ring Assigned Yet'}</div>
-<p class="muted">${j.ring ? 'Position: ' + ['CENTER', 'JUDGE A', 'JUDGE B'][j.slot ?? 0] + ' · ' + (j.checkedIn ? 'Checked in' : 'Not checked in yet') : j.competing ? 'You are temporarily unavailable for judging.' : j.checkedIn ? 'You are available when Admin assigns a ring.' : 'Check in to confirm your arrival.'}</p>
+<p class="muted">${j.ring ? 'Position: ' + ['CENTER', 'JUDGE A', 'JUDGE B'][j.slot ?? 0] + ' · ' + (j.onBreak ? 'On break' : j.checkedIn ? 'Checked in' : 'Not checked in yet') : j.competing ? 'You are temporarily unavailable for judging.' : j.checkedIn ? j.onBreak ? 'You are on break until Admin ends it.' : 'You are available when Admin assigns a ring.' : 'Check in to confirm your arrival.'}</p>
 
-<div class="profile-update"><h3>My Mobile Number</h3><p class="muted">${isShared ? 'Your roster currently has the shared demo number. Add your own number if you want to replace it.' : (j.phone ? 'Number on file: ' + esc(j.phone) : 'Phone number already on file')}</p>
+<div class="profile-update"><h3>My Mobile Number</h3><p class="muted">${isShared ? 'No mobile number on file. Please add your number.' : (j.phone ? 'Number on file: ' + esc(j.phone) : 'Phone number already on file')}</p>
 <form id="updateJudgePhoneForm"><label for="judgePhoneUpdate">${isShared ? 'Enter your mobile number' : 'Update your number'}<input id="judgePhoneUpdate" type="tel" inputmode="tel" maxlength="12" placeholder="888-123-4567" value="${isShared ? '' : esc(j.phone)}" required></label>
 <button class="primary" type="submit">${remoteMode && !window.RinggridLive?.isAdmin?.() ? 'Request Phone Update' : 'Save Mobile Number'}</button><p id="judgePhoneResult" class="registration-message" role="status"></p></form></div>
 <p class="hint">Name search does not verify identity. Please only access your own judge profile.</p>`;
@@ -328,15 +350,16 @@ ${!j.checkedIn ? `${!j.hasPhone && !normalizePhone(j.phone) ? `<label class="req
             return;
         }
         const matches = state.judges.filter(j => nameKey(j.name).includes(q)).sort((a, b) => a.name.localeCompare(b.name));
-        result.innerHTML = matches.length ? `<p class="muted">Select your name from ${matches.length} match${matches.length === 1 ? '' : 'es'}:</p><div class="search-results">${matches.map(j => `<button type="button" class="judge-result" data-judge-pick="${j.id}"><strong>${esc(j.name)}</strong><small>${j.rank}° Black Belt · ${j.checkedIn ? 'Checked In' : 'Not Checked In'}</small></button>`).join('')}</div>` : '<p class="muted">No judge found. Check the spelling or register below if you are new.</p>';
+        result.innerHTML = matches.length ? `<p class="muted">Select your name from ${matches.length} match${matches.length === 1 ? '' : 'es'}:</p><div class="search-results">${matches.map(j => `<button type="button" class="judge-result" data-judge-pick="${j.id}"><strong>${esc(j.name)}</strong><small>${j.rank}° Black Belt · ${j.onBreak ? 'On Break' : j.checkedIn ? 'Checked In' : 'Not Checked In'}</small></button>`).join('')}</div>` : '<p class="muted">No judge found. Check the spelling or register below if you are new.</p>';
     }
     function modal(html) { $('modalContent').innerHTML = html; $('modal').showModal(); }
     function messageLink(j) { const phone = normalizePhone(j.phone); return phone ? `<a class="message-link" href="sms:+1${phone}" title="Open Messages for ${esc(j.name)} at ${esc(formatPhone(phone))}">✉ Message</a>` : ''; }
     function manage(id) {
         let j = state.judges.find(x => x.id === id);
-        modal(`<h3>${esc(j.name)}</h3><p><strong>Phone on file:</strong> ${esc(formatPhone(j.phone) || 'No phone')} ${messageLink(j)}</p><label>Correct Judge Phone<input id="adminJudgePhone" type="tel" inputmode="tel" maxlength="12" value="${esc(formatPhone(j.phone))}" placeholder="888-123-4567"></label><div class="modal-actions"><button data-save-judge-phone="${j.id}">Save Corrected Phone</button></div><p>${j.rank}° Black Belt · <button class="division-code-link" data-open-judge-division="${esc(j.division)}">${esc(j.division)} ↗</button> · ${j.ringsJudged} rings judged</p>
+        modal(`<h3>${esc(j.name)} ${fatigueBadge(j)}</h3><p><strong>Phone on file:</strong> ${esc(formatPhone(j.phone) || 'No phone')} ${messageLink(j)}</p><label>Correct Judge Phone<input id="adminJudgePhone" type="tel" inputmode="tel" maxlength="12" value="${esc(formatPhone(j.phone))}" placeholder="888-123-4567"></label><div class="modal-actions"><button data-save-judge-phone="${j.id}">Save Corrected Phone</button></div><p>${j.rank}° Black Belt · <button class="division-code-link" data-open-judge-division="${esc(j.division)}">${esc(j.division)} ↗</button> · ${j.ringsJudged} total divisions · <strong>${sinceBreak(j)} since last break</strong></p>
 <p><strong>${j.checkedIn ? '✓ Checked In' : 'Not Checked In'}</strong> · ${j.competing ? 'Competing' : j.ring ? 'Ring ' + j.ring : 'Not assigned'}</p>
-<div class="modal-actions"><button class="primary" data-admin-checkin="${j.id}" ${j.checkedIn ? 'disabled' : ''}>Check In Judge</button>${j.checkedIn ? `<button data-admin-undo-checkin="${j.id}" ${j.competing ? 'disabled' : ''}>Undo Check-In</button>` : ''}</div>
+<div class="fatigue-break-control"><strong>Judge Fatigue: ${fatigue(j).emoji} ${fatigue(j).title}</strong><span>${sinceBreak(j)} division${sinceBreak(j)===1?'':'s'} since last break · ${j.ringsJudged} total</span>${j.onBreak ? `<button class="primary" data-end-break="${j.id}">End Break · Resume Judging</button>` : `<button data-give-break="${j.id}" ${!j.checkedIn||j.competing?'disabled':''}>☕ Give Judge a Break</button>`}<small>${j.onBreak?'Judge stays assigned to their ring until moved by Admin.':'Breaks reset only the emoji count, never the lifetime total.'}</small></div>
+<div class="modal-actions"><button class="primary" data-admin-checkin="${j.id}" ${j.checkedIn ? 'disabled' : ''}>Check In Judge</button>${j.checkedIn ? `<button data-admin-undo-checkin="${j.id}" ${j.competing || j.onBreak ? 'disabled' : ''}>Undo Check-In</button>` : ''}</div>
 <label>Assign to ring<select id="moveTarget"><option value="">Unassigned</option>${state.rings.map(r => `<option value="${r.id}" ${j.ring === r.id ? 'selected' : ''}>Ring ${r.id} (${esc(r.code)})</option>`).join('')}</select></label>
 <div class="modal-actions"><button class="primary" data-modal-move="${j.id}">Save Assignment</button>${j.division === 'JUDGE' ? '' : `<button data-modal-compete="${j.id}">${j.competing ? 'Finished Competing' : 'Mark Competing'}</button>`}<button data-view-judge="${j.id}">View Judge Portal</button></div>
 ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRESENT until checked in. Check-in is still required before competing.</p>' : ''}`);
@@ -346,7 +369,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
         p = p.slice(1); return p.length === 10 ? p : ''; }
     function addJudgeRecord(record, { autoCheckIn = false } = {}) { const name = String(record.name || '').trim(), rank = Number(record.rank), gender = String(record.gender || 'M').trim().toUpperCase(), comp = String(record.competing || 'no').trim().toLowerCase(), level = String(record.level || 'C').trim().toUpperCase(), age = String(record.age || '').trim(), phone = normalizePhone(record.phone); if (!name || !Number.isInteger(rank) || rank < 1 || rank > 8 || !['M', 'W', 'MALE', 'FEMALE'].includes(gender) || !['yes', 'no'].includes(comp) || (autoCheckIn && !phone) || (comp === 'yes' && (!ageCodes.includes(age) || !['C', 'R', 'CHAMPION', 'RECREATIONAL'].includes(level))))
         return 'Invalid fields'; if (isNameTaken(name))
-        return 'This name is already registered or pending'; const g = gender === 'FEMALE' ? 'W' : gender === 'MALE' ? 'M' : gender, l = level === 'CHAMPION' ? 'C' : level === 'RECREATIONAL' ? 'R' : level; state.judges.push({ id: 'J' + state.seq++, name, rank, division: comp === 'yes' ? judgeDivision(rank, g, age, l) : 'JUDGE', phone: phone ? phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3') : '', ring: null, checkedIn: autoCheckIn, competing: false, hasCompeted: false, eligibleToCompete: comp === 'yes', completedDivisions: [], ringsJudged: 0, creditedRingIds: [], response: 'none', notifications: [] }); return ''; }
+        return 'This name is already registered or pending'; const g = gender === 'FEMALE' ? 'W' : gender === 'MALE' ? 'M' : gender, l = level === 'CHAMPION' ? 'C' : level === 'RECREATIONAL' ? 'R' : level; state.judges.push({ id: 'J' + state.seq++, name, rank, division: comp === 'yes' ? judgeDivision(rank, g, age, l) : 'JUDGE', phone: phone ? phone.replace(/^(\d{3})(\d{3})(\d{4})$/, '$1-$2-$3') : '', ring: null, checkedIn: autoCheckIn, competing: false, hasCompeted: false, eligibleToCompete: comp === 'yes', completedDivisions: [], ringsJudged: 0, ringsSinceBreak: 0, onBreak: false, creditedRingIds: [], response: 'none', notifications: [] }); return ''; }
     function parseCsv(text) { const rows = []; let row = [], cell = '', quoted = false; for (let i = 0; i < text.length; i++) {
         const c = text[i];
         if (c === '"') {
@@ -381,7 +404,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
             return;
         }
         const members = state.judges.filter(j => j.division === code);
-        const blocked = members.filter(j => j.checkedIn).some(j => j.ring || j.competing || (j.completedDivisions || []).includes(code)) || !members.some(j => j.checkedIn);
+        const blocked = members.filter(j => j.checkedIn).some(j => j.onBreak || j.ring || j.competing || (j.completedDivisions || []).includes(code)) || !members.some(j => j.checkedIn);
         modal(`<h3>Division ${esc(code)}</h3><p class="muted">${members.length} registered judge(s)</p>` +
             members.map(j => `<div class="modal-row"><strong>${esc(j.name)}</strong><p class="muted">${j.rank}° · ${j.ring ? 'Judging Ring ' + j.ring : j.competing ? 'Currently competing' : (j.completedDivisions || []).includes(code) ? 'Completed division' : 'Available'}</p></div>`).join('') +
             (blocked ? '<p class="blocked-message">Cannot send: checked-in judges must be unassigned and not already competing or completed.</p>' : '') +
@@ -392,6 +415,8 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
         if (!members.length)
             return toast('No registered competitors in this division');
         const missing = members.filter(j => !j.checkedIn), present = members.filter(j => j.checkedIn);
+        const resting = present.filter(j => j.onBreak);
+        if (resting.length) return toast('End break before competition: ' + resting.map(j=>j.name).join(', '));
         if (!present.length)
             return toast('Nobody in this division is checked in. There is no one to send.');
         if (present.some(j => j.ring))
@@ -418,7 +443,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
     function approvals() { modal('<h3>Pending Judge Registrations</h3>' + (state.pending.length ? state.pending.map(p => `<div class="modal-row"><strong>${esc(p.name)}</strong><p class="muted">${p.rank}° · ${esc(p.division)} · ${esc(p.phone)}</p><div class="modal-actions"><button class="primary" data-approve="${p.id}">Approve</button><button class="danger" data-reject="${p.id}">Reject</button></div></div>`).join('') : '<p class="muted">No pending registrations.</p>')); }
     function fill(r) { modal(`<h3>Assign Judge to Ring ${r}</h3><p class="muted">Search all unassigned judges, including those not yet checked in. Preassignment does not mark them present.</p><div class="division-search-grid"><label>Search by Name<input id="assignNameSearch" placeholder="Type a name…"></label><label>Search by Rank<select id="assignRankSearch"><option value="">All Ranks</option>${Array.from({ length: 8 }, (_, i) => 8 - i).map(n => `<option value="${n}">${n}${n === 1 ? 'st' : n === 2 ? 'nd' : n === 3 ? 'rd' : 'th'} Degree</option>`).join('')}</select></label></div><label>Available Judge<select id="fillJudge"></select></label><div id="assignJudgeResults" class="muted"></div><div class="modal-actions"><button class="primary" data-fill-confirm="${r}">Assign Judge</button></div>`); renderAssignOptions(); }
     function renderAssignOptions() { const input = $('assignNameSearch'); if (!input)
-        return; const q = input.value.toLowerCase().trim(), rank = $('assignRankSearch').value, available = state.judges.filter(j => !j.ring && !j.competing && j.name.toLowerCase().includes(q) && (!rank || j.rank === +rank)).sort((a, b) => a.name.localeCompare(b.name)); const select = $('fillJudge'), old = select.value; select.innerHTML = available.map(j => `<option value="${j.id}">${esc(j.name)} · ${j.rank}° · ${esc(j.division)} · ${j.checkedIn ? 'Checked In' : 'PREASSIGN · Not Here Yet'} · ${j.ringsJudged} rings judged</option>`).join(''); if (available.some(j => j.id === old))
+        return; const q = input.value.toLowerCase().trim(), rank = $('assignRankSearch').value, available = state.judges.filter(j => !j.ring && !j.competing && !j.onBreak && j.name.toLowerCase().includes(q) && (!rank || j.rank === +rank)).sort((a, b) => a.name.localeCompare(b.name)); const select = $('fillJudge'), old = select.value; select.innerHTML = available.map(j => `<option value="${j.id}">${esc(j.name)} · ${j.rank}° · ${esc(j.division)} · ${j.checkedIn ? 'Checked In' : 'PREASSIGN · Not Here Yet'} · ${j.ringsJudged} rings judged</option>`).join(''); if (available.some(j => j.id === old))
         select.value = old; $('assignJudgeResults').textContent = available.length + ' unassigned judge(s) match, including preregistered judges who have not checked in'; const button = document.querySelector('[data-fill-confirm]'); if (button)
         button.disabled = !available.length; }
     function register() {
@@ -593,12 +618,6 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
     });
     $('adminManagementBtn').onclick=()=>{if(remoteMode){window.RinggridLive?.showAdminManager?.().catch(err=>toast(err.message));return;}modal('<h3>Admin Management</h3><p>Live Admin invitations require Firebase.</p>')};
     $('closeModal').onclick = () => $('modal').close();
-    $('resetBtn').onclick = () => { if (confirm('Reset ONLY ' + activeTournament().name + ' to its morning state?')) {
-        state = initialFor(activeTournamentId);
-        save();
-        renderAdmin();
-        toast('Tournament reset');
-    } };
     $('search').oninput = renderAdmin;
     ['rankFilter', 'availableRank'].forEach(id => $(id).onchange = renderAdmin);
     ['availableSearch', 'competingSearch', 'notCheckedInSearch'].forEach(id => $(id).oninput = renderAdmin);
@@ -619,10 +638,12 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
     $('importJudgesBtn').onclick = () => modal(`<h3>Import Judges CSV</h3><p class="muted">CSV headers: name,rank,gender,competing,level,age,phone</p><button data-download-template>Download CSV Template</button><p class="muted">To import your 113-judge private roster from this package, use the JSON import below. Do not upload that JSON file to GitHub.</p><label>Private roster JSON (.json)<input type="file" id="privateRosterFile" accept=".json,application/json"></label><div id="privateRosterPreview" class="muted"></div><div class="modal-actions"><button class="primary" data-private-roster-import disabled>Import Private Roster</button></div><label>Select CSV file<input type="file" id="judgeCsvFile" accept=".csv,text/csv"></label><div id="csvPreview"></div><div class="modal-actions"><button class="primary" data-import-confirm disabled>Import Valid Judges</button></div>`);
     ;
     document.addEventListener('click', e => {
-        let t = e.target.closest('[data-judge-pick],[data-judge-checkin],[data-admin-checkin],[data-admin-undo-checkin],[data-confirm-checkin-phone],[data-download-template],[data-private-roster-import],[data-import-confirm],[data-open-judge-division],[data-send-judge-division],[data-search-divisions],[data-apply-division-search],[data-clear-division-search],[data-finish-division],[data-jump-ring],[data-unassign],[data-fill],[data-judge-actions],[data-respond],[data-self-compete],[data-modal-move],[data-modal-compete],[data-view-judge],[data-approve],[data-reject],[data-save-judge-phone],[data-fill-confirm],[data-add-confirm],[data-create-ring],[data-archive],[data-restore],[data-clear-decline],[data-clear-all-declines],[data-configure],[data-view-archive],[data-remove-ring]');
+        let t = e.target.closest('[data-give-break],[data-end-break],[data-judge-pick],[data-judge-checkin],[data-admin-checkin],[data-admin-undo-checkin],[data-confirm-checkin-phone],[data-download-template],[data-private-roster-import],[data-import-confirm],[data-open-judge-division],[data-send-judge-division],[data-search-divisions],[data-apply-division-search],[data-clear-division-search],[data-finish-division],[data-jump-ring],[data-unassign],[data-fill],[data-judge-actions],[data-respond],[data-self-compete],[data-modal-move],[data-modal-compete],[data-view-judge],[data-approve],[data-reject],[data-save-judge-phone],[data-fill-confirm],[data-add-confirm],[data-create-ring],[data-archive],[data-restore],[data-clear-decline],[data-clear-all-declines],[data-configure],[data-view-archive],[data-remove-ring]');
         if (!t)
             return;
         let d = t.dataset;
+        if (d.giveBreak) { toggleBreak(d.giveBreak, true); return; }
+        if (d.endBreak) { toggleBreak(d.endBreak, false); return; }
         if (d.judgePick) {
             activeJudge = d.judgePick;
             renderJudge();
@@ -657,7 +678,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
                     skipped++;
                     continue;
                 }
-                state.judges.push({ ...row, phone: formatPhone(row.phone), id: 'J' + state.seq++, ring: null, checkedIn: false, competing: false, hasCompeted: false, completedDivisions: [], creditedRingIds: [], ringsJudged: 0, response: 'none', declineCleared: false, notifications: [] });
+                state.judges.push({ ...row, phone: formatPhone(row.phone), id: 'J' + state.seq++, ring: null, checkedIn: false, competing: false, hasCompeted: false, completedDivisions: [], creditedRingIds: [], ringsJudged: 0, ringsSinceBreak: 0, onBreak: false, response: 'none', declineCleared: false, notifications: [] });
                 added++;
             }
             window.__privateRosterToImport = null;
@@ -787,13 +808,15 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
             if (!r || !r.code)
                 return;
             let judges = state.judges.filter(j => j.ring === id);
+            const workingJudges = judges.filter(canWork);
             if (!confirm('Archive division in Ring ' + id + '? The ' + judges.length + ' judges will stay in the ring.'))
                 return;
             let archiveId = 'A' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
             state.archivedRings.push({ ...r, archiveId, judges: judges.map(j => ({ id: j.id, name: j.name })) });
-            judges.forEach(j => { if (!j.creditedRingIds.includes(r.divisionId)) {
+            judges.forEach(j => { if (canWork(j) && !j.creditedRingIds.includes(r.divisionId)) {
                 j.creditedRingIds.push(r.divisionId);
                 j.ringsJudged++;
+                j.ringsSinceBreak = sinceBreak(j) + 1;
             } j.response = 'none'; notify(j, 'Ring ' + id + ' division archived. You remain assigned to the ring.'); });
             r.code = '';
             r.event = 'OPEN';
@@ -801,7 +824,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
             r.packet = '';
             r.divisionId = null;
             r.setup = null;
-            log('Ring ' + id + ' division archived; judges retained; ' + judges.length + ' judges credited');
+            log('Ring ' + id + ' division archived; judges retained; ' + workingJudges.length + ' present judges eligible for credit');
             save();
             renderAdmin();
             toast('Division archived; judges remain in Ring ' + id);
@@ -867,7 +890,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
                     toast('Registration has an invalid phone number. Ask the judge to resubmit.');
                     return;
                 }
-                approvedJudge = { ...p, id: 'J' + state.seq++, phone: approvedPhone, ring: null, checkedIn: true, competing: false, hasCompeted: false, ringsJudged: 0, creditedRingIds: [], completedDivisions: [], response: 'none', notifications: [{ text: 'Registration approved — you are checked in and available for judging!', time: 'Just now', read: false }] };
+                approvedJudge = { ...p, id: 'J' + state.seq++, phone: approvedPhone, ring: null, checkedIn: true, competing: false, hasCompeted: false, ringsJudged: 0, ringsSinceBreak: 0, onBreak: false, creditedRingIds: [], completedDivisions: [], response: 'none', notifications: [{ text: 'Registration approved — you are checked in and available for judging!', time: 'Just now', read: false }] };
                 state.judges.push(approvedJudge);
                 log(p.name + ' approved and checked in');
             }

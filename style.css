@@ -82,3 +82,16 @@
 .ring-judge-link{appearance:none;background:transparent;border:0;padding:0;color:inherit;font:inherit;font-weight:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:transparent;text-underline-offset:3px}
 .ring-judge-link:hover,.ring-judge-link:focus-visible{color:#9dc1ff;text-decoration-color:currentColor;outline-offset:3px}
 #deleteTournamentBtn[hidden]{display:none!important}
+
+/* Ringgrid 2.3.3: mobile-friendly Judge Portal accordions, ring readiness and RTTL */
+.judge-accordion{border:1px solid #38557e;border-radius:16px;background:#111f39;margin:12px 0;overflow:hidden}
+.judge-accordion>summary{display:block;cursor:pointer;padding:19px 17px;list-style:none;background:#1c3051;color:#f1f6ff;font-weight:800;font-size:17px}
+.judge-accordion>summary::-webkit-details-marker{display:none}.judge-accordion>summary::after{content:'▸';float:right}.judge-accordion[open]>summary::after{content:'▾'}
+.judge-accordion-content{padding:14px}.judge-accordion-content>.card{margin:0 0 12px}
+.judge-accordion input,.judge-accordion select,.judge-accordion textarea{font-size:16px;min-height:44px}
+.judge-accordion .judge-search-form{grid-template-columns:minmax(0,1fr) auto}
+@media(max-width:650px){.judge-accordion .judge-search-form{grid-template-columns:1fr}.judge-accordion-content{padding:10px}.judge-accordion button{min-height:44px}}
+.urgent-notice{border:1px solid #a76a44;background:#352b28;color:#fff1df;padding:15px;border-radius:12px;margin-bottom:15px}
+.urgent-notice p{margin:7px 0 0}.required-checkin-phone{display:block;margin:12px 0;font-weight:700}.required-checkin-phone input{width:100%;display:block;margin-top:6px;font-size:16px}
+.rttl-request{padding:12px;margin:8px 0;border:1px solid #475c7f;border-radius:11px;background:#132743}.rttl-request>div{font-size:13px;color:#bed1f1;margin:6px 0}.rttl-request p{white-space:pre-wrap;font-size:13px}
+.login-invite{margin:20px 0 0;border-top:1px solid #3e5275;padding-top:15px}.login-invite summary{cursor:pointer;font-weight:700}.login-invite form{margin-top:15px;display:grid;gap:12px}

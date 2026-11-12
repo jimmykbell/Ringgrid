@@ -118,3 +118,13 @@
 
 /* 2.3.5: live RTTL inbox stays visible without expanding the Judge Panel. */
 .admin-rttl-inbox{margin:0 0 18px;border:1px solid #395778;border-radius:17px;background:#101e35;overflow:hidden}.admin-rttl-inbox>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;padding:15px 18px;list-style:none}.admin-rttl-inbox>summary::-webkit-details-marker{display:none}.admin-rttl-inbox>summary strong{font-size:16px}.admin-rttl-inbox>summary span{font-size:12px;color:#a7b7d5}.admin-rttl-inbox>summary strong span{font-size:15px;font-weight:900;color:#dbe9ff}.admin-rttl-inbox.has-requests{border-color:#f4b95a;box-shadow:0 0 0 1px #f4b95a24}.admin-rttl-inbox.has-requests>summary{background:#59421c6e}.admin-rttl-list{padding:0 14px 12px;display:grid;gap:8px;max-height:380px;overflow:auto}.admin-rttl-list>.rttl-request{margin:0}.admin-rttl-list>.muted{margin:4px 0 0}@media(max-width:650px){.admin-rttl-inbox>summary{align-items:flex-start;flex-direction:column}}
+
+/* Ringgrid 2.3.6 — fourth rotation spot, break roster */
+.slot.overflow-slot{border:1px dashed #6984b3;background:#182b49}
+.slot.overflow-slot .position-label{color:#d2c4ff}
+.slot.on-break-slot{border-color:#cfaa69;background:#302b28}
+.slot.on-break-slot .position-label{color:#ffe3a0}
+.break-roster-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#182a47;padding:12px;border:1px solid #40547d;border-radius:12px;margin:8px 0}
+.break-roster-row small{color:#bbceed}
+#judgeBreakCount{display:inline-block;font-size:12px;padding:2px 7px;border-radius:7px;background:#67522f;color:#fff0cf}
+@media(max-width:650px){.slot{min-height:60px}.break-roster-row{align-items:flex-start;flex-direction:column}}

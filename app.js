@@ -7,6 +7,13 @@
     const ageCodes = ['8u', '910', '1112', '1314', '1517', '1829', '3039', '4049', '5059', '6069', '70u'];
     const ranks = [['W', 'White'], ['O', 'Orange'], ['Y', 'Yellow'], ['C', 'Camo'], ['G', 'Green'], ['P', 'Purple'], ['BL', 'Blue'], ['BR', 'Brown'], ['R', 'Red'], ['1BR', '1st Black Recommended'], ...Array.from({ length: 8 }, (_, i) => [String(i + 1), `${i + 1}${['st', 'nd', 'rd'][i] || 'th'} Degree`])];
     const eventColor = e => ['Form', 'Weapon', 'Combat'].includes(e) ? 'red' : ['Sparring', 'Creative', 'Extreme'].includes(e) ? 'orange' : 'green';
+    // Center/A/B are required working positions. Fourth is optional, for rotation OR a break.
+    const SLOT_LABELS = ['CENTER', 'JUDGE A', 'JUDGE B', 'OVERFLOW / ROTATION'];
+    const ACTIVE_SLOTS = 3, MAX_SLOTS = 4;
+    const position = j => SLOT_LABELS[j.slot] || SLOT_LABELS[0];
+    const inSlot = (ring, slot, excludeId = null) => state.judges.find(j => j.id !== excludeId && j.ring === ring && j.slot === slot);
+    const activeAtRing = ring => state.judges.filter(j => j.ring === ring && j.slot >= 0 && j.slot < ACTIVE_SLOTS && canWork(j));
+    const breakAtRing = (ring, excludeId = null) => state.judges.find(j => j.id !== excludeId && j.ring === ring && j.onBreak);
     const divisionOf = (g, belts, age) => g + belts.join('') + age;
     let state, activeJudge = null, screen = 'tournaments', deferredPrompt = null, activeTournamentId = 'gmi-2026', remoteMode = false, remoteTournaments = [], adminAuthenticated = false;
     function seed() { return { judges: [], archivedRings: [], competitionLedger: [], rttlRequests: [], rings: Array.from({ length: 12 }, (_, i) => ({ id: i + 1, code: '', event: 'OPEN', capacity: 3 })), pending: [], activity: [], seq: 1 }; }
@@ -38,6 +45,7 @@
     state.archivedRings.forEach(r => r.event ??= 'OPEN');
     function save() { localStorage.setItem(localStoreKey(), JSON.stringify(state)); if (remoteMode && window.RinggridLive?.isAdmin?.())
         window.RinggridLive.saveAdminState(activeTournamentId, structuredClone(state)); }
+    if (normalizeLegacyAssignments()) save();
     function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
     const fatigueFaces = ['😎', '😁', '🙂', '😐', '😓', '🥵', '💀'];
     const fatigueTitles = ['Fresh', 'All Smiles', 'Feeling Good', 'Getting Tired', 'Needs Coffee', 'Exhausted', 'Send Help!'];
@@ -53,20 +61,92 @@
     function fatigue(j) { const i = Math.min(6, sinceBreak(j)); return {emoji:fatigueFaces[i], title:fatigueTitles[i], count:sinceBreak(j)}; }
     function fatigueBadge(j) { const x=fatigue(j); return `<span class="fatigue-face" title="${x.title} · ${x.count} divisions since break" aria-label="${x.title}, ${x.count} divisions since break">${x.emoji}</span>`; }
     function canWork(j) { return !!j.checkedIn && !j.onBreak; }
+    function normalizeLegacyAssignments() {
+        // One-time migration for previous releases where a break judge could remain
+        // in Center/A/B. Never reset counts, competition results or tournament data.
+        let changed = false;
+        for (const ring of state.rings || []) {
+            const members = state.judges.filter(j => j.ring === ring.id);
+            const used = new Set();
+            for (const j of members) {
+                if (!Number.isInteger(j.slot) || j.slot < 0 || j.slot >= MAX_SLOTS || used.has(j.slot)) {
+                    const free = [0,1,2,3].find(n => !used.has(n));
+                    if (free === undefined) continue; // Preserve historical assignments, do not silently remove a judge.
+                    j.slot = free;
+                    changed = true;
+                }
+                used.add(j.slot);
+            }
+            const resting = members.filter(j => j.onBreak);
+            if (!resting.length) continue;
+            const keep = resting.find(j => j.slot === 3) || resting[0];
+            for (const other of resting) {
+                if (other === keep) continue;
+                other.breakFromRing = ring.id;
+                other.ring = null;
+                other.slot = null;
+                changed = true;
+            }
+            if (keep.slot !== 3) {
+                const overflow = inSlot(ring.id, 3, keep.id);
+                if (overflow) {
+                    overflow.slot = keep.slot;
+                }
+                keep.slot = 3;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+    function resumeBreak(j) {
+        if (!j.onBreak) return;
+        j.onBreak = false;
+        j.breakFromRing = null;
+        notify(j, 'Your break has ended. You are available to judge again.');
+        log(j.name + ' returned from break');
+    }
     function toggleBreak(id, start) {
-        const j=state.judges.find(x=>x.id===id);
-        if(!j) return;
-        if(start && !j.checkedIn) return toast('A judge must be checked in before taking a break');
-        if(start && j.competing) return toast('Finish their competition first');
-        if(!!j.onBreak===start) return;
-        j.onBreak=start;
-        if(start) { j.fatigueResetAtTotal=Number(j.ringsJudged)||0; j.ringsSinceBreak=0; }
-        notify(j,start?'You are on break. Your fatigue meter has reset.':'Your break has ended.');
-        log(j.name+(start?' started a break':' returned from break'));
+        const j = state.judges.find(x => x.id === id);
+        if (!j) return;
+        if (start && !j.checkedIn) return toast('A judge must be checked in before taking a break');
+        if (start && j.competing) return toast('Finish their competition first');
+        if (j.onBreak === start) return;
+        if (start) {
+            const origin = j.ring;
+            const alreadyResting = origin ? state.judges.find(x => x.id !== j.id && x.onBreak && (x.ring === origin || x.breakFromRing === origin)) : null;
+            if (alreadyResting && !confirm(`Ring ${origin} already has a judge on break. Do you confirm sending ${j.name} to break also?`)) return;
+            if (alreadyResting) {
+                // Only one break judge lives in a ring's overflow spot at a time.
+                // A second resting judge remains attached to their home ring by reference,
+                // and can be found in the global Judges on Break tab.
+                j.breakFromRing = origin;
+                j.ring = null;
+                j.slot = null;
+            } else if (origin && j.slot !== 3) {
+                const overflow = inSlot(origin, 3, j.id);
+                if (overflow) {
+                    // Rotate the fourth active judge into the newly vacated working spot.
+                    overflow.slot = j.slot;
+                    notify(overflow, `Rotated into ${position(overflow)} in Ring ${origin}.`);
+                }
+                j.slot = 3;
+            }
+            j.onBreak = true;
+            j.fatigueResetAtTotal = Number(j.ringsJudged) || 0;
+            j.ringsSinceBreak = 0;
+            notify(j, 'You are on break. Your fatigue meter has reset.');
+            log(j.name + (origin ? ` started a break from Ring ${origin}` : ' started a break'));
+        } else {
+            resumeBreak(j);
+        }
         save(); renderAdmin();
-        if($('modal').open) $('modal').close();
+        if ($('modal').open) $('modal').close();
         manage(id);
-        toast(start?j.name+' is on break · fatigue reset to 😎':j.name+' is back from break');
+        if (start) {
+            const pane = $('breakJudgePanel');
+            if (pane) { pane.open = true; const parent = pane.closest('.main-panel'); if (parent) parent.open = true; }
+        }
+        toast(start ? j.name + ' is on break · fatigue reset to 😎' : j.name + ' is back from break');
     }
 
     function toast(t) { $('toast').textContent = t; $('toast').style.display = 'block'; setTimeout(() => $('toast').style.display = 'none', 2400); }
@@ -139,6 +219,7 @@
         state.competitionLedger ??= [];
     state.rttlRequests = remoteMode && adminAuthenticated ? cloudRTTL : (state.rttlRequests || []);
         state.judges.forEach(j => { j.ringsJudged ??= 0; j.ringsSinceBreak ??= j.ringsJudged; j.onBreak ??= false; j.creditedRingIds ??= []; j.completedDivisions ??= []; j.checkedIn ??= false; j.notifications ??= []; });
+        if (normalizeLegacyAssignments() && window.RinggridLive?.isAdmin?.()) save();
         if (screen === 'judge')
             renderJudge();
         if (screen === 'admin')
@@ -190,11 +271,55 @@
         toast(yes ? j.name + ' checked in and available' : j.name + ' marked not checked in');
     }
     function notify(j, t) { j.notifications.unshift({ text: t, time: new Date().toLocaleTimeString(), read: false }); j.notifications = j.notifications.slice(0, 15); }
-    function assign(id, ring, slot = -1) { let j = state.judges.find(x => x.id === id); if (!j)
-        return; if (ring && !state.rings.some(r => r.id === ring))
-        return toast('Ring not found'); if (ring && j.competing)
-        return toast('Judge is competing; mark available first'); if (ring && j.onBreak) return toast('End the judge’s break before assigning a ring'); if (ring && state.judges.filter(x => x.ring === ring && x.id !== id).length >= state.rings.find(r => r.id === ring)?.capacity)
-        return toast('Ring is full'); j.ring = ring || null; j.slot = ring ? (slot >= 0 ? slot : [0, 1, 2].find(n => !state.judges.some(x => x.id !== id && x.ring === ring && x.slot === n)) ?? 0) : null; j.response = ring ? 'assigned' : 'none'; notify(j, ring ? 'Assigned to Ring ' + ring + '.' : 'Your ring assignment has been cleared.'); log(j.name + (ring ? ' assigned to Ring ' + ring : ' removed from assignment')); save(); renderAdmin(); toast('Ring assignment saved'); }
+    function assign(id, ring, slot = -1) {
+        const j = state.judges.find(x => x.id === id);
+        if (!j) return;
+        if (ring && !state.rings.some(r => r.id === ring)) return toast('Ring not found');
+        if (ring && j.competing) return toast('Judge is competing; mark available first');
+        if (!ring) {
+            j.ring = null;
+            j.slot = null;
+            j.response = 'none';
+            if (j.onBreak) j.breakFromRing ??= null;
+            notify(j, 'Your ring assignment has been cleared.');
+            log(j.name + ' removed from assignment');
+            save(); renderAdmin(); toast('Ring assignment cleared');
+            return;
+        }
+        if (slot < 0) {
+            const candidates = j.onBreak ? [3] : [0, 1, 2, 3];
+            slot = candidates.find(n => !inSlot(ring, n, j.id));
+            if (slot === undefined) return toast(j.onBreak ? 'End the break first or free the overflow spot' : 'Ring already has four judges');
+        }
+        if (!Number.isInteger(slot) || slot < 0 || slot >= MAX_SLOTS) return toast('Invalid judging position');
+        if (j.ring === ring && j.slot === slot) return;
+        const other = inSlot(ring, slot, j.id);
+        if (other && (!j.ring || j.slot == null || !Number.isInteger(j.slot))) return toast(`${position(other)} is occupied by ${other.name}. Choose an empty spot or rotate an assigned judge.`);
+        if (other && j.ring !== ring && inSlot(j.ring, j.slot, j.id)) return toast('Previous judging position is occupied. Move that judge first.');
+        if (j.onBreak && slot < ACTIVE_SLOTS && !confirm(`Do you confirm ${j.name} is off of break?`)) return;
+        if (other?.onBreak && j.slot < ACTIVE_SLOTS && !confirm(`Do you confirm ${other.name} is off of break?`)) return;
+        // An on-break judge may use overflow, but a ring may have only one such judge.
+        if (j.onBreak && slot === 3 && breakAtRing(ring, j.id)) return toast(`Ring ${ring} already has a judge on break. End a break before placing another in overflow.`);
+        if (other?.onBreak && j.ring && j.slot === 3 && breakAtRing(j.ring, other.id)) return toast(`Ring ${j.ring} already has a judge on break.`);
+        if (!other && j.ring !== ring && state.judges.filter(x => x.ring === ring).length >= MAX_SLOTS) return toast('Ring already has four judges');
+        const previousRing = j.ring, previousSlot = j.slot;
+        if (j.onBreak && slot < ACTIVE_SLOTS) resumeBreak(j);
+        if (other) {
+            if (other.onBreak && previousSlot < ACTIVE_SLOTS) resumeBreak(other);
+            other.ring = previousRing;
+            other.slot = previousSlot;
+            other.response = previousRing ? 'assigned' : 'none';
+            notify(other, previousRing ? `Rotated to ${position(other)} in Ring ${previousRing}.` : 'Your ring assignment has been cleared.');
+            log(other.name + (previousRing ? ` rotated to Ring ${previousRing} ${position(other)}` : ' unassigned'));
+        }
+        j.ring = ring;
+        j.slot = slot;
+        j.response = 'assigned';
+        if (!j.onBreak) j.breakFromRing = null;
+        notify(j, `Assigned to Ring ${ring} · ${position(j)}${j.onBreak ? ' (on break)' : ''}.`);
+        log(j.name + ` assigned to Ring ${ring} ${position(j)}`);
+        save(); renderAdmin(); toast('Ring positions saved');
+    }
     function setCompete(id) { let j = state.judges.find(x => x.id === id); if (j?.division === 'JUDGE' || j?.eligibleToCompete === false) {
         toast('Judge-only registrations cannot compete');
         return;
@@ -278,13 +403,13 @@
     function divisionSearchModal(kind) { const f = divisionFilters[kind] || {}; const opts = (items, selected) => items.map(([v, label]) => `<option value="${esc(v)}" ${v === selected ? 'selected' : ''}>${esc(label)}</option>`).join(''); modal(`<h3>Search ${kind === 'active' ? 'Active' : 'Completed'} Divisions</h3><p class="muted">All fields optional. Rank and age match divisions containing your selection.</p><div class="division-search-grid"><label>Competition Level<select id="searchDivisionLevel">${opts([['', 'All Levels'], ['R', 'Recreational'], ['C', 'Champion']], f.level)}</select></label><label>Division<select id="searchDivisionGender">${opts([['', 'All Divisions'], ['B', 'Boys'], ['G', 'Girls'], ['M', 'Men'], ['W', 'Women']], f.gender)}</select></label><label>Rank<select id="searchDivisionRank">${opts([['', 'All Ranks'], ...ranks], f.rank)}</select></label><label>Age Bracket<select id="searchDivisionAge">${opts([['', 'All Ages'], ...ageCodes.map((v, i) => [v, ['8 & Under', '9–10', '11–12', '13–14', '15–17', '18–29', '30–39', '40–49', '50–59', '60–69', '70+'][i]])], f.age)}</select></label><label>Packet #<input id="searchDivisionPacket" placeholder="Any packet" value="${esc(f.packet || '')}"></label></div><div class="modal-actions"><button class="primary" data-apply-division-search="${kind}">Search Divisions</button><button data-clear-division-search="${kind}">Clear Search</button></div>`); }
     function renderRingPanel() {
         const entries = [
-            ['needsJudges', state.rings.filter(r => state.judges.filter(j => j.ring === r.id).length < (r.capacity || 3))],
+            ['needsJudges', state.rings.filter(r => activeAtRing(r.id).length < ACTIVE_SLOTS)],
             ['openRings', state.rings.filter(r => r.event === 'OPEN')],
             ['activeDivisions', state.rings.filter(r => !!r.code && matchDivision(r, divisionFilters.active))],
         ];
         for (const [key, rings] of entries) {
             $(key + 'Count').textContent = rings.length;
-            $(key + 'List').innerHTML = rings.map(r => { let count = state.judges.filter(j => j.ring === r.id).length; return `<button class="ring-jump" data-jump-ring="${r.id}"><strong>Ring ${r.id}</strong><small>${esc(r.code || 'No division')}${r.packet ? ' · Packet #' + esc(r.packet) : ''} · ${state.judges.filter(j=>j.ring===r.id && canWork(j)).length}/${r.capacity || 3} ready</small></button>`; }).join('') || '<p class="muted">None right now.</p>';
+            $(key + 'List').innerHTML = rings.map(r => { let count = state.judges.filter(j => j.ring === r.id).length; return `<button class="ring-jump" data-jump-ring="${r.id}"><strong>Ring ${r.id}</strong><small>${esc(r.code || 'No division')}${r.packet ? ' · Packet #' + esc(r.packet) : ''} · ${activeAtRing(r.id).length}/${ACTIVE_SLOTS} working ready</small></button>`; }).join('') || '<p class="muted">None right now.</p>';
         }
     }
     function renderAdmin() {
@@ -302,7 +427,16 @@
         const rttlTime=x=>x?.createdAt?.seconds ? x.createdAt.seconds*1000 : (Date.parse(x?.createdAt||'')||0);
         $('rttlRequestsList').innerHTML=openRTTL.length?openRTTL.sort((a,b)=>rttlTime(b)-rttlTime(a)).map(x=>`<div class="rttl-request"><strong>${esc(x.reason==='break'?'Replacement for break':x.reason==='assignment'?'Need an assignment':'Other')}</strong><div>${esc(x.judgeName)} · Ring ${esc(x.ring)}</div>${x.details?`<p>${esc(x.details)}</p>`:''}<button class="primary" data-resolve-rttl="${esc(x.id)}">Mark Resolved</button></div>`).join(''):'<p class="muted">No open RTTL requests.</p>';
         $('pendingBadge').textContent = state.pending.length ? '(' + state.pending.length + ')' : '';
-        $('rings').innerHTML = state.rings.map(r => { let js = state.judges.filter(j => j.ring === r.id), color = r.event === 'OPEN' ? (js.length ? 'green' : 'red') : eventColor(r.event); return `<article class="ring event-${color}" data-ring="${r.id}"><div class="ring-top"><strong>Ring ${r.id}</strong><span class="status ${js.filter(j => canWork(j)).length === r.capacity ? 'confirmed' : 'pending'}">${js.filter(j => canWork(j)).length}/${r.capacity} ready · ${js.length} assigned</span></div><div class="ring-sub">Division <strong>${esc(r.code || 'Not configured')}</strong>${r.code ? ` · ${r.bodyCount || 0} competitors` : ''}${r.packet ? ` · Packet #${esc(r.packet)}` : ''}</div><label class="ring-sub">Current Event<select data-ring-event="${r.id}">${events.map(v => `<option value="${esc(v)}" ${v === r.event ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label><div class="slots">${[0, 1, 2].map((slot) => { let j = js.find(x => x.slot === slot) || js.filter(x => x.slot == null)[slot]; return j ? `<div class="slot" draggable="true" data-drag="${j.id}"><div><small class="position-label">${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</small><div class="person"><button type="button" class="ring-judge-link" data-judge-actions="${esc(j.id)}" title="View details for ${esc(j.name)}">${esc(j.name)}</button>${fatigueBadge(j)}</div><small>${j.rank}° · ${esc(j.division)} · ${j.onBreak ? '☕ On Break' : j.checkedIn ? '✓ Checked In' : '⌛ Not Here Yet'}</small></div><button data-unassign="${j.id}" title="Remove">×</button></div>` : `<div class="slot empty" data-drop="${r.id}" data-slot="${slot}"><strong>${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</strong> · Drop judge here</div>`; }).join('')}</div><div class="ring-actions"><button class="primary" data-configure="${r.id}">${r.code ? 'Edit Division' : '+ Create Division'}</button><button data-fill="${r.id}">+ Assign Judge</button>${r.code ? `<button class="archive-btn" data-archive="${r.id}">Archive Division</button>` : ''}<button data-remove-ring="${r.id}" ${r.code || js.length ? 'disabled' : ''}>Remove Ring</button></div></article>`; }).join('');
+        $('rings').innerHTML = state.rings.map(r => {
+            const js = state.judges.filter(j => j.ring === r.id);
+            const ready = activeAtRing(r.id).length;
+            const color = r.event === 'OPEN' ? (ready ? 'green' : 'red') : eventColor(r.event);
+            const slots = SLOT_LABELS.map((label, slot) => {
+                const j = js.find(x => x.slot === slot);
+                return j ? `<div class="slot ${slot === 3 ? 'overflow-slot' : ''} ${j.onBreak ? 'on-break-slot' : ''}" draggable="true" data-drag="${esc(j.id)}" data-drop="${r.id}" data-slot="${slot}"><div><small class="position-label">${label}</small><div class="person"><button type="button" class="ring-judge-link" data-judge-actions="${esc(j.id)}" title="View details for ${esc(j.name)}">${esc(j.name)}</button>${fatigueBadge(j)}</div><small>${j.rank}° · ${esc(j.division)} · ${j.onBreak ? '☕ On Break' : j.checkedIn ? '✓ Checked In' : '⌛ Not Here Yet'}</small></div><button data-unassign="${esc(j.id)}" title="Remove">×</button></div>` : `<div class="slot empty ${slot === 3 ? 'overflow-slot' : ''}" data-drop="${r.id}" data-slot="${slot}"><strong>${label}</strong> · ${slot === 3 ? 'Extra judge or break' : 'Drop judge here'}</div>`;
+            }).join('');
+            return `<article class="ring event-${color}" data-ring="${r.id}"><div class="ring-top"><strong>Ring ${r.id}</strong><span class="status ${ready === ACTIVE_SLOTS ? 'confirmed' : 'pending'}">${ready}/${ACTIVE_SLOTS} working ready · ${js.length}/4 assigned</span></div><div class="ring-sub">Division <strong>${esc(r.code || 'Not configured')}</strong>${r.code ? ` · ${r.bodyCount || 0} competitors` : ''}${r.packet ? ` · Packet #${esc(r.packet)}` : ''}</div><label class="ring-sub">Current Event<select data-ring-event="${r.id}">${events.map(v => `<option value="${esc(v)}" ${v === r.event ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label><div class="slots">${slots}</div><div class="ring-actions"><button class="primary" data-configure="${r.id}">${r.code ? 'Edit Division' : '+ Create Division'}</button><button data-fill="${r.id}">+ Assign Judge</button>${r.code ? `<button class="archive-btn" data-archive="${r.id}">Archive Division</button>` : ''}<button data-remove-ring="${r.id}" ${r.code || js.length ? 'disabled' : ''}>Remove Ring</button></div></article>`;
+        }).join('');
         $('archiveCount').textContent = state.archivedRings.length + ' archived';
         $('archivedRings').innerHTML = state.archivedRings.length ? state.archivedRings.map(r => `<div class="archived-item"><div><strong>Ring ${r.id}</strong><small>${esc(r.code)}${r.packet ? ' · Packet #' + esc(r.packet) : ''} · ${esc(r.event)} · ${r.judges.length} judges</small></div><button data-view-archive="${r.archiveId}">View History</button></div>`).join('') : '<p class="muted">No archived rings yet.</p>';
         $('judgeTotal').textContent = state.judges.length;
@@ -315,11 +449,14 @@
                 el.innerHTML = rankOptions;
         }
         const matches = (j, prefix) => j.name.toLowerCase().includes($(prefix + 'Search').value.trim().toLowerCase()) && (!$(prefix + 'Rank').value || j.rank === Number($(prefix + 'Rank').value));
-        const card = (j) => `<div class="judge-row ${j.ring ? 'judge-assigned' : ''} ${j.competing ? 'judge-competing' : ''} ${!j.checkedIn ? 'judge-absent' : ''}" draggable="true" data-drag="${j.id}"><div><strong>${esc(j.name)} ${fatigueBadge(j)}</strong>${j.onBreak ? '<span class="break-label">ON BREAK</span>' : ''}${j.ring ? `<span class="ring-label">RING ${j.ring} · ${['CENTER', 'JUDGE A', 'JUDGE B'][j.slot ?? 0]}</span>` : j.competing ? '<span class="competing-label">COMPETING</span>' : !j.checkedIn ? '<span class="absent-label">NOT CHECKED IN</span>' : '<span class="present-label">CHECKED IN</span>'}<small>${j.rank}° · ${esc(j.division)} · ${j.ringsJudged} total · ${sinceBreak(j)} since break · ${j.division === 'JUDGE' ? 'JUDGE' : j.hasCompeted ? 'Competed' : 'Not competed'}</small></div><button data-judge-actions="${j.id}">Manage</button></div>`;
+        const card = (j) => `<div class="judge-row ${j.ring ? 'judge-assigned' : ''} ${j.competing ? 'judge-competing' : ''} ${!j.checkedIn ? 'judge-absent' : ''}" draggable="true" data-drag="${j.id}"><div><strong>${esc(j.name)} ${fatigueBadge(j)}</strong>${j.onBreak ? '<span class="break-label">ON BREAK</span>' : ''}${j.ring ? `<span class="ring-label">RING ${j.ring} · ${position(j)}</span>` : j.competing ? '<span class="competing-label">COMPETING</span>' : !j.checkedIn ? '<span class="absent-label">NOT CHECKED IN</span>' : '<span class="present-label">CHECKED IN</span>'}<small>${j.rank}° · ${esc(j.division)} · ${j.ringsJudged} total · ${sinceBreak(j)} since break · ${j.division === 'JUDGE' ? 'JUDGE' : j.hasCompeted ? 'Competed' : 'Not competed'}</small></div><button data-judge-actions="${j.id}">Manage</button></div>`;
         let search = $('search').value.toLowerCase(), sort = $('judgeSort').value, rank = $('rankFilter').value;
         const sorted = [...state.judges].filter(j => j.name.toLowerCase().includes(search) && (!rank || j.rank === Number(rank))).sort((a, b) => sort === 'rank' ? b.rank - a.rank || a.name.localeCompare(b.name) : sort === 'ringsAsc' ? a.ringsJudged - b.ringsJudged || a.name.localeCompare(b.name) : sort === 'ringsDesc' ? b.ringsJudged - a.ringsJudged || a.name.localeCompare(b.name) : sort === 'competed' ? Number(b.hasCompeted) - Number(a.hasCompeted) || a.name.localeCompare(b.name) : sort === 'notCompeted' ? Number(a.hasCompeted) - Number(b.hasCompeted) || a.name.localeCompare(b.name) : a.name.localeCompare(b.name));
         $('judgeList').innerHTML = sorted.map(j => card(j) + `<div class="judge-message">${messageLink(j)}</div>`).join('') || '<p class="muted">No matching judges.</p>';
         $('availableList').innerHTML = state.judges.filter(j => canWork(j) && !j.ring && !j.competing && matches(j, 'available')).sort((a, b) => b.rank - a.rank || a.name.localeCompare(b.name)).map(j => card(j) + `<div class="judge-message">${messageLink(j)}</div>`).join('') || '<p class="muted">No matching available judges.</p>';
+        const resting = state.judges.filter(j => j.onBreak).sort((a,b) => (a.ring || a.breakFromRing || 999)-(b.ring || b.breakFromRing || 999) || a.name.localeCompare(b.name));
+        $('breakJudgeCount').textContent = resting.length;
+        $('breakJudgeList').innerHTML = resting.length ? resting.map(j => card(j) + `<div class="judge-message">${j.ring ? `Overflow in Ring ${j.ring}` : `Break list · from Ring ${esc(j.breakFromRing || '—')}`} · <button data-end-break="${esc(j.id)}">End Break</button></div>`).join('') : '<p class="muted">No judges currently on break.</p>';
         const missingQuery = $('notCheckedInSearch').value.trim().toLowerCase();
         $('notCheckedInList').innerHTML = state.judges.filter(j => !j.checkedIn && j.name.toLowerCase().includes(missingQuery)).sort((a, b) => a.name.localeCompare(b.name)).map(j => `<div class="judge-row judge-absent"><div><strong>${esc(j.name)}</strong><small>${j.rank}° · ${esc(j.division)}</small></div><button class="primary" data-admin-checkin="${j.id}">Check In</button></div>`).join('') || '<p class="muted">All matching judges have checked in.</p>';
         renderCompetitionControls();
@@ -327,6 +464,10 @@
         $('notificationList').innerHTML = state.activity.slice(0, 20).map(a => `<div class="activity-item">${esc(a.text)}<small>${esc(a.time)}</small></div>`).join('');
     }
     function renderJudge() {
+        const resting = state.judges.filter(j => j.onBreak).sort((a,b) => a.name.localeCompare(b.name));
+        const publicBreakList = $('judgeBreakList');
+        if (publicBreakList) publicBreakList.innerHTML = resting.length ? resting.map(j => `<div class="break-roster-row"><strong>${esc(j.name)}</strong><small>${j.ring ? 'Ring ' + esc(j.ring) + ' · Overflow' : 'From Ring ' + esc(j.breakFromRing || '—') + ' · Break list'}</small></div>`).join('') : '<p class="muted">No judges currently on break.</p>';
+        const publicCount = $('judgeBreakCount'); if (publicCount) publicCount.textContent = resting.length;
         const j = state.judges.find(x => x.id === activeJudge), profile = $('judgeProfile'), inbox = $('judgeNotifications');
         if (!j) {
             profile.hidden = true;
@@ -341,7 +482,7 @@
 ${!j.checkedIn ? `${!j.hasPhone && !normalizePhone(j.phone) ? `<label class="required-checkin-phone">Mobile number required to check in<input id="checkinPhone" type="tel" inputmode="tel" autocomplete="tel" maxlength="12" placeholder="888-123-4567" required></label>` : ''}<button class="primary wide-button" data-judge-checkin="${j.id}">✓ I'm Here — Check In</button>` : ''}
 <div class="assignment-label">YOUR CURRENT RING ASSIGNMENT</div>
 <div class="assignment">${j.ring ? 'RING ' + j.ring : j.competing ? 'CURRENTLY COMPETING' : 'No Ring Assigned Yet'}</div>
-<p class="muted">${j.ring ? 'Position: ' + ['CENTER', 'JUDGE A', 'JUDGE B'][j.slot ?? 0] + ' · ' + (j.onBreak ? 'On break' : j.checkedIn ? 'Checked in' : 'Not checked in yet') : j.competing ? 'You are temporarily unavailable for judging.' : j.checkedIn ? j.onBreak ? 'You are on break until Admin ends it.' : 'You are available when Admin assigns a ring.' : 'Check in to confirm your arrival.'}</p>
+<p class="muted">${j.ring ? 'Position: ' + position(j) + ' · ' + (j.onBreak ? 'On break' : j.checkedIn ? 'Checked in' : 'Not checked in yet') : j.onBreak ? 'On break from Ring ' + esc(j.breakFromRing || '—') + ' · Listed under Judges on Break' : j.competing ? 'You are temporarily unavailable for judging.' : j.checkedIn ? 'You are available when Admin assigns a ring.' : 'Check in to confirm your arrival.'}</p>
 
 <div class="profile-update"><h3>My Mobile Number</h3><p class="muted">${isShared ? 'No mobile number on file. Please add your number.' : (j.phone ? 'Number on file: ' + esc(j.phone) : 'Phone number already on file')}</p>
 <form id="updateJudgePhoneForm"><label for="judgePhoneUpdate">${isShared ? 'Enter your mobile number' : 'Update your number'}<input id="judgePhoneUpdate" type="tel" inputmode="tel" maxlength="12" placeholder="888-123-4567" value="${isShared ? '' : esc(j.phone)}" required></label>
@@ -368,9 +509,9 @@ ${!j.checkedIn ? `${!j.hasPhone && !normalizePhone(j.phone) ? `<label class="req
         let j = state.judges.find(x => x.id === id);
         modal(`<h3>${esc(j.name)} ${fatigueBadge(j)}</h3><p><strong>Phone on file:</strong> ${esc(formatPhone(j.phone) || 'No phone')} ${messageLink(j)}</p><label>Correct Judge Phone<input id="adminJudgePhone" type="tel" inputmode="tel" maxlength="12" value="${esc(formatPhone(j.phone))}" placeholder="888-123-4567"></label><div class="modal-actions"><button data-save-judge-phone="${j.id}">Save Corrected Phone</button></div><p>${j.rank}° Black Belt · <button class="division-code-link" data-open-judge-division="${esc(j.division)}">${esc(j.division)} ↗</button> · ${j.ringsJudged} total divisions · <strong>${sinceBreak(j)} since last break</strong></p>
 <p><strong>${j.checkedIn ? '✓ Checked In' : 'Not Checked In'}</strong> · ${j.competing ? 'Competing' : j.ring ? 'Ring ' + j.ring : 'Not assigned'}</p>
-<div class="fatigue-break-control"><strong>Judge Fatigue: ${fatigue(j).emoji} ${fatigue(j).title}</strong><span>${sinceBreak(j)} division${sinceBreak(j)===1?'':'s'} since last break · ${j.ringsJudged} total</span>${j.onBreak ? `<button class="primary" data-end-break="${j.id}">End Break · Resume Judging</button>` : `<button data-give-break="${j.id}" ${!j.checkedIn||j.competing?'disabled':''}>☕ Give Judge a Break</button>`}<small>${j.onBreak?'Judge stays assigned to their ring until moved by Admin.':'Breaks reset only the emoji count, never the lifetime total.'}</small></div>
+<div class="fatigue-break-control"><strong>Judge Fatigue: ${fatigue(j).emoji} ${fatigue(j).title}</strong><span>${sinceBreak(j)} division${sinceBreak(j)===1?'':'s'} since last break · ${j.ringsJudged} total</span>${j.onBreak ? `<button class="primary" data-end-break="${j.id}">End Break · Resume Judging</button>` : `<button data-give-break="${j.id}" ${!j.checkedIn||j.competing?'disabled':''}>☕ Give Judge a Break</button>`}<small>${j.onBreak?'Judges on break remain in Overflow or the Judges on Break list; they cannot work Center/A/B until break is ended.':'Breaks reset only the emoji count, never the lifetime total.'}</small></div>
 <div class="modal-actions"><button class="primary" data-admin-checkin="${j.id}" ${j.checkedIn ? 'disabled' : ''}>Check In Judge</button>${j.checkedIn ? `<button data-admin-undo-checkin="${j.id}" ${j.competing || j.onBreak ? 'disabled' : ''}>Undo Check-In</button>` : ''}</div>
-<label>Assign to ring<select id="moveTarget"><option value="">Unassigned</option>${state.rings.map(r => `<option value="${r.id}" ${j.ring === r.id ? 'selected' : ''}>Ring ${r.id} (${esc(r.code)})</option>`).join('')}</select></label>
+<label>Assign to ring<select id="moveTarget"><option value="">Unassigned</option>${state.rings.map(r => `<option value="${r.id}" ${j.ring === r.id ? 'selected' : ''}>Ring ${r.id} (${esc(r.code)})</option>`).join('')}</select></label><label>Position<select id="moveSlot"><option value="-1">First available</option>${SLOT_LABELS.map((name,n)=>`<option value="${n}" ${j.ring && j.slot===n ? 'selected' : ''}>${name}</option>`).join('')}</select></label>
 <div class="modal-actions"><button class="primary" data-modal-move="${j.id}">Save Assignment</button>${j.division === 'JUDGE' ? '' : `<button data-modal-compete="${j.id}">${j.competing ? 'Finished Competing' : 'Mark Competing'}</button>`}<button data-view-judge="${j.id}">View Judge Portal</button></div>
 ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRESENT until checked in. Check-in is still required before competing.</p>' : ''}`);
     }
@@ -787,7 +928,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
         else if (d.viewArchive) {
             let a = state.archivedRings.find(x => String(x.archiveId) === String(d.viewArchive));
             if (a)
-                modal(`<h3>Archived Ring ${a.id}</h3><p>Division: <strong>${esc(a.code)}</strong> ${a.packet ? ' · Packet #' + esc(a.packet) : ''} · ${esc(a.event)}</p><p>Judges credited:</p>${a.judges.map(j => `<div class="modal-row">${esc(j.name)}</div>`).join('') || '<p class="muted">No judges assigned</p>'}`);
+                modal(`<h3>Archived Ring ${a.id}</h3><p>Division: <strong>${esc(a.code)}</strong> ${a.packet ? ' · Packet #' + esc(a.packet) : ''} · ${esc(a.event)}</p><p>Judges assigned:</p>${a.judges.map(j => `<div class="modal-row">${esc(j.name)}</div>`).join('') || '<p class="muted">No judges assigned</p>'}<p>Judges credited (Center/A/B, checked in, not on break):</p>${a.creditedJudges ? a.creditedJudges.map(j => `<div class="modal-row">${esc(j.name)}</div>`).join('') || '<p class="muted">None credited</p>' : '<p class="muted">Detailed credits unavailable for this earlier archive.</p>'}`);
         }
         else if ('createRing' in d) {
             let id = Number($('modal').dataset.ringId || 0), r = state.rings.find(x => x.id === id);
@@ -819,12 +960,14 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
             if (!r || !r.code)
                 return;
             let judges = state.judges.filter(j => j.ring === id);
-            const workingJudges = judges.filter(canWork);
+            // Only Center/A/B actually judged this division. Overflow may be
+            // occupied by a fourth active judge without that judge earning credit.
+            const workingJudges = judges.filter(j => canWork(j) && j.slot >= 0 && j.slot < ACTIVE_SLOTS);
             if (!confirm('Archive division in Ring ' + id + '? The ' + judges.length + ' judges will stay in the ring.'))
                 return;
             let archiveId = 'A' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
-            state.archivedRings.push({ ...r, archiveId, judges: judges.map(j => ({ id: j.id, name: j.name })) });
-            judges.forEach(j => { if (canWork(j) && !j.creditedRingIds.includes(r.divisionId)) {
+            state.archivedRings.push({ ...r, archiveId, judges: judges.map(j => ({ id: j.id, name: j.name })), creditedJudges: workingJudges.map(j => ({ id: j.id, name: j.name })) });
+            workingJudges.forEach(j => { if (!j.creditedRingIds.includes(r.divisionId)) {
                 j.creditedRingIds.push(r.divisionId);
                 const previousSinceBreak=sinceBreak(j);
                 j.ringsJudged++;
@@ -875,7 +1018,7 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
             renderJudge();
         }
         else if (d.modalMove) {
-            assign(d.modalMove, Number($('moveTarget').value) || null);
+            assign(d.modalMove, Number($('moveTarget').value) || null, Number($('moveSlot')?.value ?? -1));
             $('modal').close();
         }
         else if (d.modalCompete) {

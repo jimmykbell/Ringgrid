@@ -14,7 +14,7 @@ const $=id=>document.getElementById(id);
 const enabled=(location.protocol==='https:'||new URLSearchParams(location.search).get('live')==='1')&&firebaseConfig?.projectId;
 let db,auth,unsubTournament=null,unsubPrivate=null,unsubPublic=null,unsubCheckins=null,unsubRegistrations=null;
 let isAdmin=false,isOwner=false,activeTournamentId=null,fullSnapshot=null,publicSnapshot=null,checkedInIds=new Set();
-let savesInFlight=Promise.resolve(),saveTimer=null,remoteApplication=false,unsubPhone=null,unsubRTTL=null,unsubCheckinPhones=null,privatePhones={};
+let savesInFlight=Promise.resolve(),saveTimer=null,remoteApplication=false,unsubPhone=null,unsubRTTL=null,unsubCheckinPhones=null,privatePhones={},localSave=null,saveVersion=0;
 const base='rg23_tournaments',adm='rg23_admins',inv='rg23_admin_invites';
 const errText=e=>e?.code?`${e.code}: ${e.message||''}`:e?.message||String(e);
 function badge(text,color=''){$('connectionBadge').textContent=text;$('connectionBadge').className='demo '+color}
@@ -25,7 +25,7 @@ const privateRef=id=>doc(db,base,id,'private','state');
 const publicRef=id=>doc(db,base,id,'public','state');
 const checkinRef=(id,jid)=>doc(db,base,id,'checkins',jid);
 const regRef=(id,rid)=>doc(db,base,id,'registrations',rid);
-const safePublic=s=>({judges:s.judges.map(j=>({id:j.id,name:j.name,rank:j.rank,division:j.division,hasPhone:!!j.phone,ring:j.ring||null,slot:j.slot??0,response:j.response||'none',checkedIn:!!j.checkedIn,competing:!!j.competing,eligibleToCompete:j.eligibleToCompete!==false,completedDivisions:j.completedDivisions||[],ringsJudged:j.ringsJudged||0,ringsSinceBreak:j.ringsSinceBreak??j.ringsJudged??0,onBreak:!!j.onBreak,hasCompeted:!!j.hasCompeted,notifications:[]})),rings:(s.rings||[]).map(r=>({...r})),archivedRings:[],competitionLedger:[],pending:[],activity:[],seq:s.seq||1});
+const safePublic=s=>({judges:s.judges.map(j=>({id:j.id,name:j.name,rank:j.rank,division:j.division,hasPhone:!!j.phone,ring:j.ring||null,slot:j.slot??0,response:j.response||'none',checkedIn:!!j.checkedIn,competing:!!j.competing,eligibleToCompete:j.eligibleToCompete!==false,completedDivisions:j.completedDivisions||[],ringsJudged:j.ringsJudged||0,ringsSinceBreak:j.ringsSinceBreak??j.ringsJudged??0,fatigueResetAtTotal:j.fatigueResetAtTotal??null,onBreak:!!j.onBreak,hasCompeted:!!j.hasCompeted,notifications:[]})),rings:(s.rings||[]).map(r=>({...r})),archivedRings:[],competitionLedger:[],pending:[],activity:[],seq:s.seq||1});
 function mergePresence(snapshot){if(!snapshot)return snapshot;const s=structuredClone(snapshot);for(const j of s.judges||[]){j.checkedIn=checkedInIds.has(j.id);if(isAdmin&&privatePhones[j.id]){j.phone=privatePhones[j.id];j.hasPhone=true;}}return s}
 function savePrivatePhoneUpdates(){
  if(!isAdmin||!activeTournamentId||!fullSnapshot)return;
@@ -46,7 +46,7 @@ async function logout(){clearPrivileged();isAdmin=false;isOwner=false;bridge.set
 function clearPrivileged(){if(unsubPrivate)unsubPrivate();if(unsubRegistrations)unsubRegistrations();if(unsubPhone)unsubPhone();if(unsubRTTL)unsubRTTL();if(unsubCheckinPhones)unsubCheckinPhones();unsubPrivate=unsubRegistrations=unsubPhone=unsubRTTL=unsubCheckinPhones=null;fullSnapshot=null}
 
 function attachPrivate(id){clearPrivileged();if(!isAdmin||!id)return;
- unsubPrivate=onSnapshot(privateRef(id),snapshot=>{if(!snapshot.exists())return;fullSnapshot=snapshot.data().state;savePrivatePhoneUpdates();displayRemote();},error=>badge('● PRIVATE DATA ERROR: '+errText(error),'error-status'));
+ unsubPrivate=onSnapshot(privateRef(id),snapshot=>{if(!snapshot.exists())return;if(localSave?.id===id)return;fullSnapshot=snapshot.data().state;savePrivatePhoneUpdates();displayRemote();},error=>badge('● PRIVATE DATA ERROR: '+errText(error),'error-status'));
  unsubRegistrations=onSnapshot(collection(db,base,id,'registrations'),snap=>{const pending=snap.docs.map(d=>d.data());bridge.setPending?.(pending)},error=>badge('● REGISTRATION READ ERROR: '+errText(error),'error-status'));
  unsubRTTL=onSnapshot(collection(db,base,id,'rttlRequests'),snap=>{bridge.setRTTLRequests?.(snap.docs.map(d=>({...d.data(),id:d.id})))},error=>badge('● RTTL READ ERROR: '+errText(error),'error-status'));
  unsubCheckinPhones=onSnapshot(collection(db,base,id,'checkinPhones'),snap=>{const next={};snap.docs.forEach(d=>{const v=d.data();if(v.judgeId&&v.phone)next[v.judgeId]=v.phone});privatePhones=next;savePrivatePhoneUpdates();displayRemote()},error=>badge('● PHONE SYNC ERROR: '+errText(error),'error-status'));
@@ -77,11 +77,14 @@ async function deleteTournament(id){throwIfNotOwner();if(!id)throw Error('No tou
 }
 
 // Admin writes are coalesced so consecutive drag/drop actions don't flood a document.
-function saveAdminState(id,state){if(!enabled||!isAdmin||!id)return;fullSnapshot=structuredClone(state);
+function saveAdminState(id,state){if(!enabled||!isAdmin||!id)return;
+ const snapshot=structuredClone(state), version=++saveVersion;
+ fullSnapshot=snapshot;localSave={id,version};
  if(saveTimer)clearTimeout(saveTimer);
- saveTimer=setTimeout(()=>{const snapshot=structuredClone(fullSnapshot);savesInFlight=savesInFlight.then(async()=>{
+ saveTimer=setTimeout(()=>{saveTimer=null;savesInFlight=savesInFlight.then(async()=>{
   const batch=writeBatch(db);batch.set(privateRef(id),{state:snapshot,updatedAt:serverTimestamp()});batch.set(publicRef(id),{state:safePublic(snapshot),updatedAt:serverTimestamp()});await batch.commit();
- }).catch(e=>badge('● SAVE ERROR: '+errText(e),'error-status'));},220)}
+  if(localSave?.id===id&&localSave.version===version)localSave=null;
+ }).catch(e=>{if(localSave?.id===id&&localSave.version===version)localSave=null;badge('● SAVE ERROR: '+errText(e),'error-status')});},220)}
 async function setCheckin(id,judgeId,yes,phone=''){
  if(!auth.currentUser)throw Error('Not signed in to Firebase');
  if(yes){const batch=writeBatch(db);

@@ -41,7 +41,15 @@
     function esc(v) { return String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
     const fatigueFaces = ['😎', '😁', '🙂', '😐', '😓', '🥵', '💀'];
     const fatigueTitles = ['Fresh', 'All Smiles', 'Feeling Good', 'Getting Tired', 'Needs Coffee', 'Exhausted', 'Send Help!'];
-    function sinceBreak(j) { const value = Number(j.ringsSinceBreak ?? j.ringsJudged ?? 0); return Math.max(0, Number.isFinite(value) ? Math.floor(value) : 0); }
+    function sinceBreak(j) {
+        // The most recent break establishes a baseline against the lifetime total.
+        // This avoids a stale ringsSinceBreak field re-inflating the fatigue meter.
+        const total=Number(j.ringsJudged ?? 0), baseline=Number(j.fatigueResetAtTotal);
+        if(j.fatigueResetAtTotal != null && Number.isFinite(total) && Number.isFinite(baseline))
+            return Math.max(0, Math.floor(total-baseline));
+        const value=Number(j.ringsSinceBreak ?? j.ringsJudged ?? 0);
+        return Math.max(0, Number.isFinite(value) ? Math.floor(value) : 0);
+    }
     function fatigue(j) { const i = Math.min(6, sinceBreak(j)); return {emoji:fatigueFaces[i], title:fatigueTitles[i], count:sinceBreak(j)}; }
     function fatigueBadge(j) { const x=fatigue(j); return `<span class="fatigue-face" title="${x.title} · ${x.count} divisions since break" aria-label="${x.title}, ${x.count} divisions since break">${x.emoji}</span>`; }
     function canWork(j) { return !!j.checkedIn && !j.onBreak; }
@@ -52,7 +60,7 @@
         if(start && j.competing) return toast('Finish their competition first');
         if(!!j.onBreak===start) return;
         j.onBreak=start;
-        if(start) j.ringsSinceBreak=0;
+        if(start) { j.fatigueResetAtTotal=Number(j.ringsJudged)||0; j.ringsSinceBreak=0; }
         notify(j,start?'You are on break. Your fatigue meter has reset.':'Your break has ended.');
         log(j.name+(start?' started a break':' returned from break'));
         save(); renderAdmin();
@@ -290,7 +298,9 @@
         $('registrationCount').textContent = state.pending.length;
         const openRTTL=(state.rttlRequests||[]).filter(x=>x.status!=='resolved');
         $('rttlCount').textContent=openRTTL.length;
-        $('rttlRequestsList').innerHTML=openRTTL.length?openRTTL.sort((a,b)=>(b.createdAt?.seconds||0)-(a.createdAt?.seconds||0)).map(x=>`<div class="rttl-request"><strong>${esc(x.reason==='break'?'Replacement for break':x.reason==='assignment'?'Need an assignment':'Other')}</strong><div>${esc(x.judgeName)} · Ring ${esc(x.ring)}</div>${x.details?`<p>${esc(x.details)}</p>`:''}<button class="primary" data-resolve-rttl="${esc(x.id)}">Mark Resolved</button></div>`).join(''):'<p class="muted">No open RTTL requests.</p>';
+        const inbox=$('adminRTTLInbox');if(inbox){inbox.classList.toggle('has-requests',openRTTL.length>0);if(openRTTL.length)inbox.open=true;}
+        const rttlTime=x=>x?.createdAt?.seconds ? x.createdAt.seconds*1000 : (Date.parse(x?.createdAt||'')||0);
+        $('rttlRequestsList').innerHTML=openRTTL.length?openRTTL.sort((a,b)=>rttlTime(b)-rttlTime(a)).map(x=>`<div class="rttl-request"><strong>${esc(x.reason==='break'?'Replacement for break':x.reason==='assignment'?'Need an assignment':'Other')}</strong><div>${esc(x.judgeName)} · Ring ${esc(x.ring)}</div>${x.details?`<p>${esc(x.details)}</p>`:''}<button class="primary" data-resolve-rttl="${esc(x.id)}">Mark Resolved</button></div>`).join(''):'<p class="muted">No open RTTL requests.</p>';
         $('pendingBadge').textContent = state.pending.length ? '(' + state.pending.length + ')' : '';
         $('rings').innerHTML = state.rings.map(r => { let js = state.judges.filter(j => j.ring === r.id), color = r.event === 'OPEN' ? (js.length ? 'green' : 'red') : eventColor(r.event); return `<article class="ring event-${color}" data-ring="${r.id}"><div class="ring-top"><strong>Ring ${r.id}</strong><span class="status ${js.filter(j => canWork(j)).length === r.capacity ? 'confirmed' : 'pending'}">${js.filter(j => canWork(j)).length}/${r.capacity} ready · ${js.length} assigned</span></div><div class="ring-sub">Division <strong>${esc(r.code || 'Not configured')}</strong>${r.code ? ` · ${r.bodyCount || 0} competitors` : ''}${r.packet ? ` · Packet #${esc(r.packet)}` : ''}</div><label class="ring-sub">Current Event<select data-ring-event="${r.id}">${events.map(v => `<option value="${esc(v)}" ${v === r.event ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select></label><div class="slots">${[0, 1, 2].map((slot) => { let j = js.find(x => x.slot === slot) || js.filter(x => x.slot == null)[slot]; return j ? `<div class="slot" draggable="true" data-drag="${j.id}"><div><small class="position-label">${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</small><div class="person"><button type="button" class="ring-judge-link" data-judge-actions="${esc(j.id)}" title="View details for ${esc(j.name)}">${esc(j.name)}</button>${fatigueBadge(j)}</div><small>${j.rank}° · ${esc(j.division)} · ${j.onBreak ? '☕ On Break' : j.checkedIn ? '✓ Checked In' : '⌛ Not Here Yet'}</small></div><button data-unassign="${j.id}" title="Remove">×</button></div>` : `<div class="slot empty" data-drop="${r.id}" data-slot="${slot}"><strong>${['CENTER', 'JUDGE A', 'JUDGE B'][slot]}</strong> · Drop judge here</div>`; }).join('')}</div><div class="ring-actions"><button class="primary" data-configure="${r.id}">${r.code ? 'Edit Division' : '+ Create Division'}</button><button data-fill="${r.id}">+ Assign Judge</button>${r.code ? `<button class="archive-btn" data-archive="${r.id}">Archive Division</button>` : ''}<button data-remove-ring="${r.id}" ${r.code || js.length ? 'disabled' : ''}>Remove Ring</button></div></article>`; }).join('');
         $('archiveCount').textContent = state.archivedRings.length + ' archived';
@@ -338,8 +348,8 @@ ${!j.checkedIn ? `${!j.hasPhone && !normalizePhone(j.phone) ? `<label class="req
 <button class="primary" type="submit">${remoteMode && !window.RinggridLive?.isAdmin?.() ? 'Request Phone Update' : 'Save Mobile Number'}</button><p id="judgePhoneResult" class="registration-message" role="status"></p></form></div>
 <p class="hint">Name search does not verify identity. Please only access your own judge profile.</p>`;
         inbox.innerHTML = '<h3>Assignment Updates</h3>' + (j.notifications.length ? j.notifications.map(n => `<div class="notice ${n.read ? '' : 'unread'}">${esc(n.text)}<small>${esc(n.time)}</small></div>`).join('') : '<p class="muted">No notifications yet.</p>');
-        j.notifications.forEach(n => n.read = true);
-        save();
+        const unread=j.notifications.filter(n=>!n.read);
+        if(unread.length){unread.forEach(n=>n.read=true);if(!remoteMode)save();}
     }
     function searchJudge() {
         const q = nameKey($('judgeNameSearch').value), result = $('judgeMatches');
@@ -598,13 +608,14 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
         if(!judgeName.includes(' ') || !ring || !['break','assignment','other'].includes(reason) || (reason==='other'&&!details)) {
             status.textContent='Enter your first and last name, ring (or N/A), and request details for Other.';status.classList.add('error');return;
         }
-        const id='rttl-'+encodeURIComponent(nameKey(judgeName)).slice(0,110)+'-'+reason;
+        const id='rttl-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);
         const request={id,judgeName,ring,reason,details:reason==='other'?details:'',status:'open',createdAt:new Date().toISOString()};
         const button=$('sendRTTLBtn');button.disabled=true;button.textContent='Sending…';
-        const done=()=>{status.textContent='Your request was sent to the RTTL. For emergencies or tournament problems, send a judge in person.';status.classList.add('success');toast('RTTL request sent');button.disabled=false;button.textContent='Send Request';};
-        const fail=err=>{status.textContent=err?.message?.includes('permission')?'An open request of this type may already exist. Ask staff if you need to update it.':'Could not send request: '+(err.message||err);status.classList.add('error');button.disabled=false;button.textContent='Send Request';};
-        if(remoteMode)window.RinggridLive?.sendRTTLRequest?.(activeTournamentId,request).then(done).catch(fail);
-        else{state.rttlRequests??=[];if(state.rttlRequests.some(x=>x.id===id&&x.status==='open')){fail(Error('A request of this type is already open for that name.'));return;}state.rttlRequests=state.rttlRequests.filter(x=>x.id!==id);state.rttlRequests.push(request);save();done();}
+        const done=()=>{status.textContent=(remoteMode?'Your request was sent to the RTTL.':'Your request is saved in this browser (LOCAL DEMO ONLY, not delivered to another device).')+' For emergencies or tournament problems, send a judge in person.';status.classList.add('success');toast('RTTL request sent');button.disabled=false;button.textContent='Send Request';};
+        const fail=err=>{status.textContent='REQUEST NOT SENT. Please contact the RTTL in person. '+(err?.code==='permission-denied'?'Firestore permission denied; Admin must check the deployed RTTL security rules.':(err?.message||err));status.classList.add('error');button.disabled=false;button.textContent='Send Request';};
+        if(remoteMode){const sender=window.RinggridLive?.sendRTTLRequest; if(typeof sender==='function')sender(activeTournamentId,request).then(done).catch(fail); else fail(Error('Live messaging is unavailable.'));}
+        else if(hostedNeedsFirebase()){fail(Error('This page is not connected to Firebase. Check the connection status and reload.'));}
+        else{state.rttlRequests??=[];state.rttlRequests.push(request);save();done();}
     }
     $('rttlForm').onsubmit=submitRTTLRequest;
     document.querySelectorAll('.judge-accordion').forEach(section=>section.addEventListener('toggle',()=>{if(section.open)document.querySelectorAll('.judge-accordion').forEach(other=>{if(other!==section)other.open=false})}));
@@ -815,8 +826,9 @@ ${!j.checkedIn ? '<p class="muted">This judge can be preassigned but is NOT PRES
             state.archivedRings.push({ ...r, archiveId, judges: judges.map(j => ({ id: j.id, name: j.name })) });
             judges.forEach(j => { if (canWork(j) && !j.creditedRingIds.includes(r.divisionId)) {
                 j.creditedRingIds.push(r.divisionId);
+                const previousSinceBreak=sinceBreak(j);
                 j.ringsJudged++;
-                j.ringsSinceBreak = sinceBreak(j) + 1;
+                j.ringsSinceBreak = j.fatigueResetAtTotal != null ? sinceBreak(j) : previousSinceBreak+1;
             } j.response = 'none'; notify(j, 'Ring ' + id + ' division archived. You remain assigned to the ring.'); });
             r.code = '';
             r.event = 'OPEN';

@@ -145,3 +145,27 @@
 .competition-group-actions button{flex:1 1 145px;font-size:12px;padding:8px}
 .competition-group-header{flex-wrap:wrap}
 .waiting-checkin{font-size:11px;color:#edcfa2;white-space:nowrap;padding:7px 4px}
+
+/* 2.3.9: two-stage competition control and collapsible judge lists */
+.division-control-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:10px}
+.division-control-actions button{width:auto;margin:0;min-height:41px;padding:8px 5px;font-size:12px;line-height:1.15}
+.division-preview-details{margin:8px 0;border:1px solid #3b5377;border-radius:10px;overflow:hidden}
+.division-preview-details>summary{padding:9px 10px;cursor:pointer;display:flex;align-items:center;gap:8px;flex-wrap:wrap;list-style:none}
+.division-preview-details>summary::-webkit-details-marker{display:none}
+.division-preview-details>summary:before{content:'▸';color:#a8c5f7;margin-right:2px}
+.division-preview-details[open]>summary:before{content:'▾'}
+.division-preview-details .division-members{padding:4px 10px 9px;max-height:250px;overflow:auto;border-top:1px solid #3b5377}
+.division-summary small{display:block;color:#9fb5d9;font-size:11px;margin-top:3px}
+.expand-hint{font-size:10px;color:#a6bcd9;margin-left:auto}
+.division-status-badge{font-size:10px;color:#ffcf81;letter-spacing:.04em;white-space:nowrap}
+.division-status-badge.holding{color:#a6c4fa}
+.competition-group-details{width:100%;min-width:0}
+.competition-group-details>summary{cursor:pointer;list-style:none;display:flex;gap:8px;align-items:center;justify-content:space-between;padding:1px 0 7px}
+.competition-group-details>summary::-webkit-details-marker{display:none}
+.competition-group-details>summary:before{content:'▸';color:#a8c5f7}
+.competition-group-details[open]>summary:before{content:'▾'}
+.competition-group-details .competition-group-members{max-height:270px;overflow:auto;margin:5px 0 10px;border-top:1px solid #3a5377;padding-top:6px}
+.competition-group-actions{margin:3px 0 0}
+.competition-group-actions button{flex:1 1 120px}
+.holding-label{font-size:11px;color:#a5c6ff}
+@media(max-width:390px){.division-control-actions{grid-template-columns:1fr}}

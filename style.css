@@ -128,3 +128,20 @@
 .break-roster-row small{color:#bbceed}
 #judgeBreakCount{display:inline-block;font-size:12px;padding:2px 7px;border-radius:7px;background:#67522f;color:#fff0cf}
 @media(max-width:650px){.slot{min-height:60px}.break-roster-row{align-items:flex-start;flex-direction:column}}
+
+/* Division competition readiness summary */
+.division-summary{display:flex;flex-direction:column;gap:6px;padding:12px 0 9px;border-bottom:1px solid #4a6389;font-size:13px}
+.division-summary>span{color:#c1d3ef}
+.division-summary>span button{width:auto;display:inline-block;margin:0 0 0 6px;padding:4px 8px;font-size:11px}
+.division-completed-status{color:#9de4ab}
+.division-competing-status{color:#fbd38d}
+#competitionDivision{max-width:100%;font-size:14px}
+
+/* 2.3.8: concise division picker and pre-check-in competition holding */
+#competitionDivision option.competition-finished-option{color:#a9afba;opacity:.65}
+.division-summary.division-completed{color:#aab4c4;opacity:.75}
+.competition-holding-title{font-size:14px;margin:14px 0 10px;color:#e1eaff}
+.competition-group-actions{display:flex;flex-wrap:wrap;gap:7px;margin:0 0 9px}
+.competition-group-actions button{flex:1 1 145px;font-size:12px;padding:8px}
+.competition-group-header{flex-wrap:wrap}
+.waiting-checkin{font-size:11px;color:#edcfa2;white-space:nowrap;padding:7px 4px}
